@@ -9,6 +9,7 @@ function(espi_add_core_test NAME)
 endfunction()
 
 espi_add_core_test(test_crc)
+espi_add_core_test(test_lanes)
 
 # ---------------------------------------------------------------------------
 #  Rule R3: the specification-derived tables must be unreachable from here.

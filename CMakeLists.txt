@@ -27,6 +27,7 @@ endif()
 
 add_library(espi_core STATIC
     src/core/src/Crc8.cpp
+    src/core/src/LaneCodec.cpp
 )
 
 target_include_directories(espi_core

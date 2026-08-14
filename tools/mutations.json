@@ -1,0 +1,65 @@
+{
+  "_comment": [
+    "Mutations applied by tools/mutate.py. Each entry corrupts one fact the",
+    "decoder depends on; the suite is expected to notice. An entry reported as",
+    "SURVIVED names a fact no test currently constrains -- that is a missing",
+    "vector, not a passing grade.",
+    "",
+    "Keep 'find' strings anchored enough to match exactly once. mutate.py",
+    "fails the run if a pattern matches zero times or more than once, so a",
+    "refactor that silently stops applying a mutation is caught rather than",
+    "quietly reported as killed."
+  ],
+
+  "mutations": [
+    {
+      "label": "crc: polynomial 0x07 -> 0x06",
+      "file": "src/core/include/espi/Crc8.h",
+      "find": "kPolynomial = 0x07",
+      "replace": "kPolynomial = 0x06",
+      "tests": "test_crc"
+    },
+    {
+      "label": "crc: seed 0x00 -> 0xFF",
+      "file": "src/core/include/espi/Crc8.h",
+      "find": "kSeed = 0x00",
+      "replace": "kSeed = 0xFF",
+      "tests": "test_crc"
+    },
+    {
+      "label": "lanes: reverse bit order within a clock",
+      "file": "src/core/include/espi/LaneCodec.h",
+      "find": "return 7 - group * bits_per_clock - ( bits_per_clock - 1 ) + lane_offset;",
+      "replace": "return 7 - group * bits_per_clock - lane_offset;",
+      "tests": "test_lanes"
+    },
+    {
+      "label": "lanes: emit groups LSB-first instead of MSB-first",
+      "file": "src/core/include/espi/LaneCodec.h",
+      "find": "return 7 - group * bits_per_clock - ( bits_per_clock - 1 ) + lane_offset;",
+      "replace": "return group * bits_per_clock + lane_offset;",
+      "tests": "test_lanes"
+    },
+    {
+      "label": "lanes: single-mode response on IO[0] instead of IO[1]",
+      "file": "src/core/include/espi/IoMode.h",
+      "find": "phase == Phase::Command ? 0 : 1",
+      "replace": "phase == Phase::Command ? 0 : 0",
+      "tests": "test_lanes"
+    },
+    {
+      "label": "lanes: dual mode treated as 4 bits per clock",
+      "file": "src/core/include/espi/IoMode.h",
+      "find": "return mode == IoMode::Single ? 1 : ( mode == IoMode::Dual ? 2 : 4 );",
+      "replace": "return mode == IoMode::Single ? 1 : 4;",
+      "tests": "test_lanes"
+    },
+    {
+      "label": "timing: TAR 2 clocks -> 1 clock",
+      "file": "src/core/include/espi/IoMode.h",
+      "find": "kTurnAroundClocks = 2",
+      "replace": "kTurnAroundClocks = 1",
+      "tests": "test_lanes"
+    }
+  ]
+}

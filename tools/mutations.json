@@ -60,6 +60,62 @@
       "find": "kTurnAroundClocks = 2",
       "replace": "kTurnAroundClocks = 1",
       "tests": "test_lanes"
+    },
+    {
+      "label": "opcode: GET_VWIRE 0x05 -> 0x15",
+      "file": "src/core/tables/Opcodes.h",
+      "find": "X( GET_VWIRE, 0x05, 0xFF, VirtualWire, false )",
+      "replace": "X( GET_VWIRE, 0x15, 0xFF, VirtualWire, false )",
+      "tests": "test_opcodes"
+    },
+    {
+      "label": "opcode: GET_CONFIGURATION 0x21 -> 0x31",
+      "file": "src/core/tables/Opcodes.h",
+      "find": "X( GET_CONFIGURATION, 0x21, 0xFF, ChannelIndependent, false )",
+      "replace": "X( GET_CONFIGURATION, 0x31, 0xFF, ChannelIndependent, false )",
+      "tests": "test_opcodes"
+    },
+    {
+      "label": "opcode: swap PUT_PC and GET_PC encodings",
+      "file": "src/core/tables/Opcodes.h",
+      "find": "X( PUT_PC, 0x00, 0xFF, Peripheral, false )",
+      "replace": "X( PUT_PC, 0x01, 0xFF, Peripheral, false )",
+      "tests": "test_opcodes"
+    },
+    {
+      "label": "opcode: short-cycle base 0x40 -> 0x41 (9-bit misread)",
+      "file": "src/core/tables/Opcodes.h",
+      "find": "X( PUT_IORD_SHORT, 0x40, 0xFC, Peripheral, true )",
+      "replace": "X( PUT_IORD_SHORT, 0x41, 0xFC, Peripheral, true )",
+      "tests": "test_opcodes"
+    },
+    {
+      "label": "opcode: short-cycle mask 0xFC -> 0xFF (C1C0 ignored)",
+      "file": "src/core/tables/Opcodes.h",
+      "find": "X( PUT_IOWR_SHORT, 0x44, 0xFC, Peripheral, true )",
+      "replace": "X( PUT_IOWR_SHORT, 0x44, 0xFF, Peripheral, true )",
+      "tests": "test_opcodes"
+    },
+    {
+      "label": "opcode: C1C0 length 01b -> 3 bytes",
+      "file": "src/core/tables/Opcodes.h",
+      "find": "X( 0x1, 2 )",
+      "replace": "X( 0x1, 3 )",
+      "tests": "test_opcodes"
+    },
+    {
+      "label": "opcode: C1C0 reserved 10b given a length",
+      "file": "src/core/tables/Opcodes.h",
+      "find": "X( 0x2, 0 ) /* Reserved */",
+      "replace": "X( 0x2, 3 ) /* Reserved */",
+      "tests": "test_opcodes"
+    },
+    {
+      "label": "opcode: channel of GET_OOB mislabelled",
+      "file": "src/core/tables/Opcodes.h",
+      "find": "X( GET_OOB, 0x07, 0xFF, Oob, false )",
+      "replace": "X( GET_OOB, 0x07, 0xFF, Flash, false )",
+      "tests": "test_opcodes"
     }
   ]
 }

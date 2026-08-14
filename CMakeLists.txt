@@ -28,6 +28,8 @@ endif()
 add_library(espi_core STATIC
     src/core/src/Crc8.cpp
     src/core/src/LaneCodec.cpp
+    src/core/src/Decode.cpp
+    src/core/src/Opcodes.cpp
 )
 
 target_include_directories(espi_core

@@ -15,6 +15,11 @@ else()
     add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
+# The shell's objects end up inside a loadable module, so everything they are
+# linked with has to be position independent -- including the otherwise-static
+# core. Harmless when the plugin is off.
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # ---------------------------------------------------------------------------
 #  espi_core -- protocol decoding. Never includes a Saleae header.
 #
@@ -45,20 +50,54 @@ target_include_directories(espi_core
 )
 
 # ---------------------------------------------------------------------------
+#  Saleae shell and Logic 2 plugin -- need the SDK. Off by default so the core
+#  and its tests build with no network access and no SDK present.
+#
+#  This block comes BEFORE add_subdirectory(tests) because the T2 test links
+#  espi_shell and the SDK's offline harness, both defined here.
+#
+#  THE LOGIC2 SPLIT. FrameV2 is declared only behind #ifdef LOGIC2 in the SDK's
+#  AnalyzerResults.h and is defined nowhere in testlib/, so a translation unit
+#  that names it cannot appear in a test binary's link (docs/PLAN.md section 6,
+#  gotcha 3). Exactly one small file names FrameV2 and only the plugin compiles
+#  it. Everything else compiles once, as an OBJECT library, and is reused by
+#  both binaries (gotcha 4).
+#
+#  The split is ABI-safe: LOGIC2 guards only the FrameV2 class itself and the
+#  non-virtual AddFrameV2, so it changes no vtable.
+# ---------------------------------------------------------------------------
+
+if(ESPI_BUILD_PLUGIN)
+    include(cmake/AnalyzerSDK.cmake)
+
+    add_library(espi_shell OBJECT
+        src/saleae/SamplingByteSource.cpp
+        src/saleae/EspiAnalyzerSettings.cpp
+        src/saleae/EspiAnalyzerResults.cpp
+        src/saleae/EspiAnalyzer.cpp
+    )
+
+    # SDK headers, but deliberately NOT the SDK library: which implementation
+    # of those headers gets linked is the consumer's choice, and that is the
+    # whole point of the seam.
+    target_include_directories(espi_shell PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/saleae
+        ${ESPI_SDK_ROOT}/include
+    )
+    target_link_libraries(espi_shell PUBLIC espi_core)
+
+    add_library(espi_analyzer MODULE
+        src/saleae/FrameV2SinkLogic2.cpp
+    )
+    target_link_libraries(espi_analyzer PRIVATE espi_shell Saleae::AnalyzerSDK)
+    target_compile_definitions(espi_analyzer PRIVATE LOGIC2)
+endif()
+
+# ---------------------------------------------------------------------------
 #  Tests
 # ---------------------------------------------------------------------------
 
 if(ESPI_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
-endif()
-
-# ---------------------------------------------------------------------------
-#  Logic 2 plugin -- needs the Saleae SDK. Off by default so the core and its
-#  tests build with no network access and no SDK present.
-# ---------------------------------------------------------------------------
-
-if(ESPI_BUILD_PLUGIN)
-    include(cmake/AnalyzerSDK.cmake)
-    message(STATUS "Plugin target not yet implemented (phase 0 in progress)")
 endif()

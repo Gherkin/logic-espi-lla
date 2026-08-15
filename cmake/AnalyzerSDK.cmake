@@ -26,6 +26,10 @@ set(ESPI_SDK_ROOT "${analyzersdk_SOURCE_DIR}")
 # The SDK's own testlib/CMakeLists.txt hardcodes ${PROJECT_SOURCE_DIR}/AnalyzerSDK
 # for its include path, which is wrong for any project consuming the SDK.
 # Build the harness ourselves over its source list instead.
+#
+# NOTE the harness is header-and-stub only: it deliberately does NOT link
+# Saleae::AnalyzerSDK. A test binary linking both would get two definitions of
+# every SDK symbol. See docs/PLAN.md section 6, gotcha 4.
 function(espi_add_test_harness TARGET)
     set(_h "${ESPI_SDK_ROOT}/testlib")
     add_library(${TARGET} STATIC

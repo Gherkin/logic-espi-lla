@@ -7,6 +7,8 @@ CLAUDE.md
 # deliberately out of the published repo.
 docs/
 
-# build output
-build/
+# build output. The pattern is deliberately wide: the SDK build needs its own
+# directory (ESPI_BUILD_PLUGIN=ON), and a fresh one is the only way to trust a
+# warning count.
+build*/
 compile_commands.json

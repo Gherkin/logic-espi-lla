@@ -20,6 +20,34 @@ target_compile_definitions(test_link PRIVATE
     ESPI_VECTOR_DIR="${CMAKE_CURRENT_SOURCE_DIR}/vectors")
 
 # ---------------------------------------------------------------------------
+#  T2 -- sampling and integration. Needs the SDK, so it only exists when the
+#  plugin is enabled. The core tests above stay buildable with no SDK present.
+#
+#  This links espi_shell (the analyzer sources, compiled once) against the SDK's
+#  offline STUBS -- never Saleae::AnalyzerSDK, which only the plugin links.
+#  FrameV2SinkRecording.cpp replaces FrameV2SinkLogic2.cpp here: testlib defines
+#  no FrameV2 symbols at all, so the Logic 2 sink would fail to link.
+#  docs/PLAN.md section 6, gotchas 3 and 4.
+#
+#  R3 still holds: espi_core exposes only src/core/include, so src/core/tables/
+#  is no more reachable from this test than from any other.
+# ---------------------------------------------------------------------------
+
+if(ESPI_BUILD_PLUGIN)
+    espi_add_test_harness(espi_test_harness)
+
+    add_executable(test_sampling
+        test_sampling.cpp
+        ${CMAKE_SOURCE_DIR}/src/saleae/FrameV2SinkRecording.cpp
+    )
+    target_link_libraries(test_sampling PRIVATE espi_shell espi_test_harness)
+    target_include_directories(test_sampling PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_definitions(test_sampling PRIVATE
+        ESPI_VECTOR_DIR="${CMAKE_CURRENT_SOURCE_DIR}/vectors")
+    add_test(NAME test_sampling COMMAND test_sampling)
+endif()
+
+# ---------------------------------------------------------------------------
 #  Rule R3: the specification-derived tables must be unreachable from here.
 #
 #  r3_seam_probe.cpp includes a private table header. It is excluded from the

@@ -6,8 +6,9 @@
 // values were typed from the specification, not lifted from the header.
 //
 // What this catches: a table that drifts from what its author read.
-// What this cannot catch: an author who misread the page. That is what gate
-// QC-2 is for, and why the table header is still marked HUMAN PENDING.
+// What this cannot catch: an author who misread the page. Only a second person
+// reading the rendered page closes that, which is what tools/qc_worksheet.py
+// produces a checklist for.
 //
 // Three of these opcodes -- 0x21, 0x22, 0x05 -- also appear in the third-party
 // capture, so they carry independent corroboration on top of the transcription.

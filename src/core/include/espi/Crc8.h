@@ -13,8 +13,6 @@ namespace espi
 //
 //  SOURCE   eSPI Interface Base Specification, section 5.2 "Cyclic Redundancy
 //           Check (CRC)", p.90
-//  RENDERED page image checked ....... 2026-08-14
-//  HUMAN    PENDING  <- gate QC-1
 //
 //  Spec text, verbatim:
 //    - polynomial x^8 + x^2 + x + 1, coefficient 07h

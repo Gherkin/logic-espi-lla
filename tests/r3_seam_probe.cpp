@@ -5,10 +5,15 @@
 // reach of test and encode code has been broken, and round-trip tests can
 // start silently agreeing with themselves.
 //
-// The include below resolves fine from inside espi_core's own sources, and
-// must not resolve from anywhere else.
+// The include below is exactly how src/core/src/Opcodes.cpp reaches the table.
+// It resolves fine from inside espi_core's own sources, and must not resolve
+// from anywhere else.
+//
+// Point this at a header that REALLY EXISTS under src/core/tables/. A probe
+// naming a deleted file also fails to compile, and would pass this test while
+// proving nothing at all.
 
-#include "TableProvenance.h"
+#include "Opcodes.h"
 
 int main()
 {

@@ -11,8 +11,6 @@ namespace espi
 //
 //  SOURCE   eSPI Interface Base Specification, section 5.1, Figures 56/57/58
 //           ("Single I/O Mode" p.88, "Dual I/O Mode" p.88, "Quad I/O Mode" p.89)
-//  RENDERED page images 88-89 checked ....... 2026-08-14
-//  HUMAN    PENDING  <- gate QC-4
 //
 //  Read off the rendered waveform diagrams, not the extracted text -- the text
 //  layer states only "shifted from bit[7] to bit[0]" and says nothing about

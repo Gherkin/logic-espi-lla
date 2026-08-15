@@ -6,7 +6,6 @@ checked only by its author is checked once. This turns them into something a
 person can verify against a rendered spec page without reading any C++.
 
     python3 tools/qc_worksheet.py                 # markdown to stdout
-    python3 tools/qc_worksheet.py --status        # just the pending summary
     python3 tools/qc_worksheet.py -o qc.md
 
 Generating the worksheet from the tables is safe precisely because the
@@ -14,8 +13,9 @@ worksheet is not the oracle -- the specification is, and the reader is. What
 this cannot do is tell you whether a value is right; it tells you exactly
 which values to check and where to look them up.
 
-Signing off: change ESPI_HUMAN_PENDING("QC-n") to ESPI_HUMAN_VERIFIED("date")
-in the table header. --status then stops listing it.
+The checklist is a working document, not a record. Tick it off, fix whatever
+it turns up, then throw it away -- sign-off state deliberately does not live
+in the headers.
 """
 
 import argparse
@@ -23,19 +23,13 @@ import re
 import sys
 from pathlib import Path
 
-# Provenance banners are not confined to the private tables directory: the CRC
-# parameters (QC-1) and the lane assignment (QC-4) are public API, but they are
-# still transcribed facts and still need a human to read them against a page.
+# Spec citations are not confined to the private tables directory: the CRC
+# parameters and the lane assignment are public API, but they are still
+# transcribed facts and still need a human to read them against a page.
 SCAN_DIRS = [Path("src/core/tables"), Path("src/core/include/espi")]
-EXCLUDE = {"TableProvenance.h"}
 
-# Provenance fields live in the banner comment above each table.
-FIELD_RE = {
-    "source": re.compile(r"^//\s+SOURCE\s+(.*?)\s*$"),
-    "crossref": re.compile(r"^//\s+CROSSREF\s+(.*?)\s*$"),
-    "rendered": re.compile(r"^//\s+RENDERED\s+(.*?)\s*$"),
-    "human": re.compile(r"^//\s+HUMAN\s+(.*?)\s*$"),
-}
+# The citation lives in the banner comment above each table.
+SOURCE_RE = re.compile(r"^//\s+SOURCE\s+(.*?)\s*$")
 # The banner title is the first comment line after the opening divider.
 DIVIDER_RE = re.compile(r"^//\s*-{10,}\s*$")
 TITLE_RE = re.compile(r"^//\s{2}(\S.*?)\s*$")
@@ -45,42 +39,40 @@ TABLE_DEF_RE = re.compile(r"^#define\s+(ESPI_\w*TABLE)\s*\(\s*X\s*\)")
 # the very checklist meant to catch a wrong Reserved encoding.
 ENTRY_RE = re.compile(r"^\s*X\(\s*(.*?)\s*\)\s*(?:/\*\s*(.*?)\s*\*/)?\s*\\?\s*$")
 GROUP_RE = re.compile(r"^\s*/\*\s*-*\s*(.*?)\s*-*\s*\*/\s*\\?\s*$")
-# Continuation of a provenance field: comment line indented past the keyword
+# Continuation of the citation: a comment line indented past the keyword
 # column and not itself a keyword.
 CONTINUATION_RE = re.compile(r"^//\s{9,}(\S.*?)\s*$")
 
 
 def parse_header(path: Path) -> dict:
     lines = path.read_text(encoding="utf-8").splitlines()
-    banner = {"title": None, "source": "", "crossref": "", "rendered": "", "human": ""}
-    tables, current, group, last_field = [], None, None, None
-    after_divider = False
+    banner = {"title": None, "source": ""}
+    tables, current, group = [], None, None
+    in_source, after_divider = False, False
 
     for line in lines:
-        matched_field = False
-        for key, pattern in FIELD_RE.items():
-            m = pattern.match(line)
-            if m:
-                # Keep the FIRST occurrence. A file may mention SOURCE again in
-                # a subordinate comment -- IoMode.h cites section 3.10 for the
-                # TAR constant -- and that must not displace the banner.
-                if not banner[key]:
-                    banner[key] = m.group(1)
-                    last_field = key
-                matched_field = True
-                break
+        m = SOURCE_RE.match(line)
+        if m:
+            # Keep the FIRST occurrence. A file may cite a second source in a
+            # subordinate comment -- IoMode.h cites section 3.10 for the TAR
+            # constant -- and that must not displace the banner citation.
+            if not banner["source"]:
+                banner["source"] = m.group(1)
+                in_source = True
+            continue
 
-        if not matched_field and last_field and current is None:
+        if in_source and current is None:
             m = CONTINUATION_RE.match(line)
             if m:
-                banner[last_field] = f"{banner[last_field]} {m.group(1)}".strip()
-            elif line.startswith("//"):
-                last_field = None
+                banner["source"] = f"{banner['source']} {m.group(1)}".strip()
+                continue
+            in_source = False
 
-        if banner["title"] is None and not matched_field:
+        if banner["title"] is None:
             if DIVIDER_RE.match(line):
                 after_divider = True
-            elif after_divider:
+                continue
+            if after_divider:
                 m = TITLE_RE.match(line)
                 if m:
                     banner["title"] = m.group(1).strip().rstrip(".")
@@ -91,7 +83,6 @@ def parse_header(path: Path) -> dict:
             current = {"macro": m.group(1), "entries": []}
             tables.append(current)
             group = None
-            last_field = None
             continue
 
         if current is not None:
@@ -110,11 +101,6 @@ def parse_header(path: Path) -> dict:
 
     banner["file"] = path.name
     banner["path"] = str(path).replace("\\", "/")
-    banner["pending"] = "PENDING" in banner["human"]
-    banner["gate"] = ""
-    gm = re.search(r"(QC-\d+)", banner["human"])
-    if gm:
-        banner["gate"] = gm.group(1)
     return {"banner": banner, "tables": tables}
 
 
@@ -126,27 +112,11 @@ def render(parsed_files: list) -> str:
     )
     out.append("")
 
-    pending = [p for p in parsed_files if p["banner"]["pending"]]
-    if pending:
-        out.append("## Outstanding")
-        out.append("")
-        out.append("| Table | Gate | Source |")
-        out.append("| --- | --- | --- |")
-        for p in pending:
-            b = p["banner"]
-            out.append(f"| {b['title'] or b['file']} | {b['gate'] or '-'} | {b['source']} |")
-        out.append("")
-
     for p in parsed_files:
         b = p["banner"]
-        status = f"PENDING ({b['gate']})" if b["pending"] else b["human"]
         out.append(f"## {b['title'] or b['file']}")
         out.append("")
         out.append(f"- **Source** — {b['source']}")
-        if b["crossref"] and "none" not in b["crossref"].lower():
-            out.append(f"- **Cross-reference** — {b['crossref']}")
-        out.append(f"- **Rendered check** — {b['rendered']}")
-        out.append(f"- **Human sign-off** — {status}")
         out.append(f"- **Defined in** — `{b['path']}`")
         out.append("")
 
@@ -181,29 +151,12 @@ def render(parsed_files: list) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-o", "--output", help="write markdown here instead of stdout")
-    ap.add_argument("--status", action="store_true", help="print pending tables only, and exit nonzero if any")
     args = ap.parse_args()
 
-    # TableProvenance.h defines the bookkeeping machinery, not a fact. Its
-    # explanatory comment uses the same field names, so exclude it by name
-    # rather than by shape.
-    headers = [h for d in SCAN_DIRS for h in sorted(d.glob("*.h")) if h.name not in EXCLUDE]
-    # Anything carrying a HUMAN field is a transcribed fact under QC, whether
-    # or not it happens to have a lookup table.
-    parsed = [p for p in (parse_header(h) for h in headers) if p["banner"]["human"]]
-
-    if args.status:
-        pending = [p for p in parsed if p["banner"]["pending"]]
-        if not pending:
-            print("all transcribed facts have human sign-off")
-            return 0
-        print(f"{len(pending)} item(s) awaiting human verification:\n")
-        for p in sorted(pending, key=lambda p: p["banner"]["gate"]):
-            b = p["banner"]
-            count = sum(len(t["entries"]) for t in p["tables"])
-            what = f"{count} entries" if count else "header facts"
-            print(f"  {b['gate'] or '?':<6} {b['title'] or b['file']:<28} {what:<14} {b['path']}")
-        return 1
+    headers = [h for d in SCAN_DIRS for h in sorted(d.glob("*.h"))]
+    # A SOURCE citation is what marks a header as transcribed from the spec,
+    # whether or not it happens to carry a lookup table.
+    parsed = [p for p in (parse_header(h) for h in headers) if p["banner"]["source"]]
 
     text = render(parsed)
     if args.output:

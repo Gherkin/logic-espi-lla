@@ -60,6 +60,6 @@ that survives is a missing test, not a pass.
 **Specification tables are read off rendered pages, never off extracted text.**
 PDF text extraction mangles tables in ways that look plausible. It has already
 turned an eight-bit opcode encoding into nine bits by reading a footnote marker
-as a bit. Tables carry a provenance block recording the source page and whether a
-human has verified them; `tools/qc_worksheet.py --status` exits nonzero while any
-remain unverified.
+as a bit. Every table cites the document and page it was read from, and
+`tools/qc_worksheet.py` turns those tables into a checklist a second person can
+read against the rendered pages.

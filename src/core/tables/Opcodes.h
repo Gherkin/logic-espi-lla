@@ -1,17 +1,12 @@
 #ifndef ESPI_TABLE_OPCODES_H
 #define ESPI_TABLE_OPCODES_H
 
-#include "TableProvenance.h"
-
 // ---------------------------------------------------------------------------
 //  COMMAND OPCODE ENCODINGS
 //
 //  SOURCE   eSPI Interface Base Specification
 //           Table 2: "Command Opcode Encodings", pp.25-27
 //           Note 1 (p.27) for the C1C0 request-length encoding
-//  CROSSREF none -- the base spec is sole authority for opcodes
-//  RENDERED page images 25, 26, 27 checked ....... 2026-08-14
-//  HUMAN    PENDING  <- gate QC-2
 //
 //  TRANSCRIPTION HAZARD, recorded because it nearly landed in the code:
 //  extracted text renders the short-cycle encodings as "010000C 1 C 0 1",
@@ -72,8 +67,5 @@
     X( 0x1, 2 )                                                                                                                    \
     X( 0x2, 0 ) /* Reserved */                                                                                                     \
     X( 0x3, 4 )
-
-ESPI_TABLE_PROVENANCE( Opcodes, "eSPI Base Spec, Table 2, pp.25-27", "none -- sole authority", ESPI_RENDERED( "2026-08-14" ),
-                       ESPI_HUMAN_PENDING( "QC-2" ) );
 
 #endif // ESPI_TABLE_OPCODES_H

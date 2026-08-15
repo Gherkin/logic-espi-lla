@@ -23,6 +23,7 @@
 #include "support/FixtureByteSource.h"
 #include "support/TestMacros.h"
 
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -203,8 +204,31 @@ void TestPeripheralPackets()
 
     // The three Table 5 rows nothing else reaches -- Memory Write 64, Message
     // with Data, and the flash copy of Unsuccessful Completion Without Data.
-    // See TestEveryCycleTypeHasAVector for why they went unnoticed.
+    // See TestDecodeCoverage for why they went unnoticed.
     CheckAgainstExpected( "cycle_type_coverage.espi", "cycle_type_coverage.expected", true );
+}
+
+// The vectors added to close the decode-coverage gaps. Each exists because
+// TestDecodeCoverage found a transcribed entry that no packet had ever reached.
+void TestDecodeCoverageVectors()
+{
+    // All twelve status bits, and the reserved spans §6.2 requires to be zero.
+    CheckAgainstExpected( "status_all_bits.espi", "status_all_bits.expected", true );
+
+    // FATAL_ERROR, NON_FATAL_ERROR and NO_RESPONSE -- three response codes that
+    // each do something different to the rest of the phase. Not strict on
+    // consumption: NO_RESPONSE means the target never drove the phase, so there
+    // is deliberately nothing after the response byte.
+    CheckAgainstExpected( "response_errors.espi", "response_errors.expected", false );
+
+    // GET_NP, the last peripheral shape with no decode behind it.
+    CheckAgainstExpected( "get_np_request.espi", "get_np_request.expected", true );
+
+    // The four System Event wires every other vwire fixture masks.
+    CheckAgainstExpected( "vwire_remaining_wires.espi", "vwire_remaining_wires.expected", true );
+
+    // Offsets 004h and 040h, the two registers with a layout nothing read.
+    CheckAgainstExpected( "config_device_and_flash.espi", "config_device_and_flash.expected", true );
 }
 
 void TestWaitState()
@@ -1830,46 +1854,61 @@ void TestMctpHeader()
     TEST_CHECK( MctpSourceBit0Expected() != SmbusAddressBit0Expected() );
 }
 
-// Phase 6 of docs/PLAN.md exits on "every Table 5 cycle type has a vector".
+// --- decode coverage ---------------------------------------------------------
 //
-// That is a stronger claim than anything else in this file checks, and the
-// difference is easy to miss. TestCycleTypeEncodings walks all 18 rows, and the
-// mutation suite kills a mutation on any of them -- but both compare a row
-// against the transcription, and neither needs the decoder to have decoded a
-// packet carrying it. A row can be correctly transcribed, fully mutation
-// covered, and have a header layout no decode has ever used.
+// Every other test in this file compares a transcribed row against what a human
+// typed from the page. This one asks a different question: has a real packet
+// ever been decoded that reached this row?
 //
-// So this reads the .expected files and asks a different question: did a real
-// transaction come out the other side naming this row? Three rows failed it
-// when it was first written, which is why cycle_type_coverage.espi exists.
-void TestEveryCycleTypeHasAVector()
+// The distinction is not obvious and it hid three Table 5 rows for two stages.
+// The table tests walk every row and the mutation suite kills a mutation on any
+// of them -- but both compare a row against the transcription, and neither needs
+// a decode to have happened. A row can be correctly transcribed, fully mutation
+// covered, and have a layout the decoder has never used.
+//
+// `docs/PLAN.md` phase 6 exits on "every Table 5 cycle type has a vector". This
+// asserts that, and the same property for the four other tables where an entry
+// has structure of its own that the decoder walks: packet shapes, configuration
+// registers, System Event wires, response codes and status bits.
+//
+// It deliberately does NOT cover the flat value tables -- frequencies, payload
+// sizes, latency scales. Those resolve through one shared lookup, so a second
+// entry exercises no new path, and the mutation suite already pins their values.
+// Requiring a vector for each would be busywork that reads as thoroughness.
+
+namespace coverage
+{
+
+struct Corpus
+{
+    std::vector<std::string> lines;                             // every line of every .expected
+    std::vector<std::pair<ChannelId, std::string>> cycle_types; // channel, "NN <name>"
+    std::vector<std::string> opcodes;                           // opcode names
+    std::vector<uint16_t> addresses;                            // config addresses, low 12 bits
+};
+
+Corpus Load()
 {
     static const char* kFixtures[] = {
-        "put_pc_memory_write32.expected", "get_pc_completion.expected",  "put_np_memory_read.expected",
-        "completion_split.expected",      "put_pc_ltr_message.expected", "short_cycles.expected",
-        "put_oob_smbus.expected",         "get_oob_mctp.expected",       "flash_controller_attached.expected",
-        "flash_target_attached.expected", "flash_rpmc.expected",         "cycle_type_coverage.expected",
+        "get_configuration.expected",        "set_configuration.expected",
+        "config_general.expected",           "config_vwire_max.expected",
+        "config_oob_channel.expected",       "config_flash_rpmc.expected",
+        "config_device_and_flash.expected",  "get_vwire.expected",
+        "get_vwire_boot_done.expected",      "get_vwire_platform_index.expected",
+        "get_vwire_system_events.expected",  "put_vwire_system_events.expected",
+        "vwire_remaining_wires.expected",    "vwire_malformed.expected",
+        "get_status_vwire_append.expected",  "wait_state.expected",
+        "malformed.expected",                "status_all_bits.expected",
+        "response_errors.expected",          "put_pc_memory_write32.expected",
+        "get_pc_completion.expected",        "put_np_memory_read.expected",
+        "get_np_request.expected",           "completion_split.expected",
+        "put_pc_ltr_message.expected",       "short_cycles.expected",
+        "cycle_type_coverage.expected",      "put_oob_smbus.expected",
+        "get_oob_mctp.expected",             "flash_controller_attached.expected",
+        "flash_target_attached.expected",    "flash_rpmc.expected",
     };
 
-    // Matching a cycle type line on its own is not enough. Table 5 prints three
-    // rows -- the two completions without data and the one with -- once per
-    // channel with the SAME name and the SAME encoding, so "Cycle Type  0x06
-    // Successful Completion Without Data" is ambiguous on the page and in the
-    // decode. A peripheral vector would silently stand in for its flash
-    // namesake and leave the flash row untested.
-    //
-    // The channel comes from the opcode, so the corpus is walked in order: each
-    // "Opcode  0xNN" line sets the channel for every cycle type line after it
-    // until the next one. That leans on the opcode table's Channel column being
-    // right, which test_opcodes pins separately.
-    struct Seen
-    {
-        ChannelId channel;
-        uint8_t encoding;
-        std::string name;
-    };
-    std::vector<Seen> seen;
-
+    Corpus c;
     for( const char* fixture : kFixtures )
     {
         bool ok = false;
@@ -1878,50 +1917,193 @@ void TestEveryCycleTypeHasAVector()
             std::fprintf( stderr, "FAIL  cannot read %s\n", fixture );
         TEST_CHECK( ok );
 
+        // The channel comes from the opcode, so the file is walked in order:
+        // each "Opcode" line sets the channel for every cycle type line after
+        // it. Table 5 prints three rows with the same name AND the same
+        // encoding on two channels, so without this a peripheral vector would
+        // silently stand in for its flash namesake.
         ChannelId channel = ChannelId::ChannelIndependent;
         std::istringstream lines( text );
         std::string line;
         while( std::getline( lines, line ) )
         {
-            unsigned byte = 0;
-            char name[ 128 ] = { 0 };
+            c.lines.push_back( line );
 
-            if( std::sscanf( line.c_str(), "  Opcode  0x%2X", &byte ) == 1 )
+            unsigned byte = 0;
+            char name[ 160 ] = { 0 };
+
+            if( std::sscanf( line.c_str(), "  Opcode  0x%2X  %159[^\n]", &byte, name ) == 2 )
             {
                 OpcodeInfo info;
                 channel = LookupOpcode( static_cast<uint8_t>( byte ), &info ) ? info.channel
                                                                              : ChannelId::ChannelIndependent;
+                c.opcodes.push_back( name );
                 continue;
             }
-            if( std::sscanf( line.c_str(), "  Cycle Type  0x%2X  %127[^\n]", &byte, name ) == 2 )
-                seen.push_back( Seen{ channel, static_cast<uint8_t>( byte ), std::string( name ) } );
+            if( std::sscanf( line.c_str(), "  Cycle Type  0x%2X  %159[^\n]", &byte, name ) == 2 )
+            {
+                char keyed[ 200 ];
+                std::snprintf( keyed, sizeof( keyed ), "%02X %s", byte, name );
+                c.cycle_types.push_back( { channel, keyed } );
+                continue;
+            }
+            if( std::sscanf( line.c_str(), "  Address  0x%4X", &byte ) == 1 )
+                c.addresses.push_back( static_cast<uint16_t>( byte & 0x0FFF ) );
         }
     }
+    return c;
+}
 
+bool Contains( const Corpus& c, const std::string& text )
+{
+    for( const std::string& line : c.lines )
+        if( line.find( text ) != std::string::npos )
+            return true;
+    return false;
+}
+
+} // namespace coverage
+
+void TestDecodeCoverage()
+{
+    const coverage::Corpus c = coverage::Load();
+    TEST_CHECK( !c.lines.empty() );
+
+    // --- Table 5: every cycle type ---
     for( size_t i = 0; i < CycleTypeCount(); ++i )
     {
         const CycleTypeInfo& row = CycleTypeAt( i );
-
         bool found = false;
-        for( const Seen& s : seen )
+        for( const auto& seen : c.cycle_types )
         {
-            // A row with a variable field spans several bytes, and any of them
-            // counts as a vector for that row.
-            if( s.channel != row.channel || ( s.encoding & row.mask ) != row.encoding )
+            if( seen.first != row.channel )
                 continue;
-            if( s.name == row.name )
+            // A row with a variable field spans several bytes; any of them
+            // counts as a vector for that row.
+            const unsigned byte = static_cast<unsigned>( std::stoul( seen.second.substr( 0, 2 ), nullptr, 16 ) );
+            if( ( byte & row.mask ) != row.encoding )
+                continue;
+            if( seen.second.substr( 3 ) == row.name )
                 found = true;
         }
-
         if( !found )
-            std::fprintf( stderr, "FAIL  %s on the %s channel has no decode vector\n", row.name,
+            std::fprintf( stderr, "FAIL  cycle type %s on the %s channel has no decode vector\n", row.name,
                           ChannelName( row.channel ) );
         TEST_CHECK( found );
     }
+    TEST_CHECK( c.cycle_types.size() >= CycleTypeCount() );
 
-    // And the walk must actually have found cycle types, or the loop above
-    // passes by comparing an empty list against itself.
-    TEST_CHECK( seen.size() >= CycleTypeCount() );
+    // --- every opcode with a transcribed packet shape ---
+    //
+    // RESET is the exception and stays one: it has no shape, so there is
+    // nothing to decode. Asserting that explicitly keeps this honest when the
+    // gap list finally empties.
+    for( unsigned opcode = 0; opcode <= 0xFF; ++opcode )
+    {
+        OpcodeInfo info;
+        if( !LookupOpcode( static_cast<uint8_t>( opcode ), &info ) )
+            continue;
+        if( info.encoding != opcode )
+            continue; // a masked opcode reports once, at its base encoding
+
+        if( !LookupShape( static_cast<uint8_t>( opcode ), nullptr ) )
+        {
+            if( std::string( info.name ) != "RESET" )
+                std::fprintf( stderr, "FAIL  %s has no packet shape and is not the known gap\n", info.name );
+            TEST_CHECK( std::string( info.name ) == "RESET" );
+            continue;
+        }
+
+        const bool found = std::find( c.opcodes.begin(), c.opcodes.end(), std::string( info.name ) ) != c.opcodes.end();
+        if( !found )
+            std::fprintf( stderr, "FAIL  opcode %s has a shape but no decode vector\n", info.name );
+        TEST_CHECK( found );
+    }
+
+    // --- every configuration register with a field layout ---
+    for( unsigned address = 0; address <= 0xFFF; address += 4 )
+    {
+        const char* name = nullptr;
+        if( ClassifyConfigAddress( static_cast<uint16_t>( address ), &name ) != ConfigAddress::Decoded )
+            continue;
+        const bool found =
+            std::find( c.addresses.begin(), c.addresses.end(), static_cast<uint16_t>( address ) ) != c.addresses.end();
+        if( !found )
+            std::fprintf( stderr, "FAIL  register %03X (%s) has a layout but no decode vector\n", address, name );
+        TEST_CHECK( found );
+    }
+
+    // --- every named System Event wire ---
+    //
+    // Matched on "<name>  bit N = " rather than a whole line: the level and the
+    // assert/release text vary with the packet, and the point here is only that
+    // the wire was reached.
+    for( uint8_t index = 2; index <= 7; ++index )
+    {
+        VwireBit wires[ 8 ];
+        const size_t count = VwireBitsForIndex( index, wires, 8 );
+        for( size_t i = 0; i < count && i < 8; ++i )
+        {
+            if( wires[ i ].reserved )
+                continue; // RSV has no name to render
+            char needle[ 96 ];
+            std::snprintf( needle, sizeof( needle ), "%s  bit %u = ", wires[ i ].name,
+                           static_cast<unsigned>( wires[ i ].level_bit ) );
+            if( !coverage::Contains( c, needle ) )
+                std::fprintf( stderr, "FAIL  virtual wire %s at index %u has no decode vector\n", wires[ i ].name,
+                              index );
+            TEST_CHECK( coverage::Contains( c, needle ) );
+        }
+    }
+
+    // --- every response code ---
+    //
+    // These are not one code path: NO_RESPONSE ends the phase, DEFER and the two
+    // errors suppress the completion elements, and the errors carry different
+    // severities.
+    //
+    // The distinct NAMES are collected by walking all 256 bytes rather than
+    // filtering on the modifier and reserved fields. Filtering was the first
+    // attempt and it silently skipped NO_RESPONSE, whose whole-byte encoding FFh
+    // has R1R0 = 11 and RSV = 11 by construction -- so the one response code
+    // with its own early-exit path was the one the check never reached.
+    std::vector<std::string> codes;
+    for( unsigned byte = 0; byte <= 0xFF; ++byte )
+    {
+        ResponseInfo info;
+        if( !LookupResponse( static_cast<uint8_t>( byte ), &info ) )
+            continue;
+        if( std::find( codes.begin(), codes.end(), std::string( info.name ) ) == codes.end() )
+            codes.push_back( info.name );
+    }
+    if( codes.size() != 6 )
+        std::fprintf( stderr, "FAIL  Table 3 should define 6 response codes, found %zu\n", codes.size() );
+    TEST_CHECK_EQ( codes.size(), size_t( 6 ) );
+
+    for( const std::string& name : codes )
+    {
+        // WAIT_STATE never reaches a "Response" line -- it is consumed before
+        // the response byte is classified -- so it renders as its own field.
+        const std::string prefix = ( name == "WAIT_STATE" ) ? "  WAIT_STATE  " : "  Response  ";
+        bool found = false;
+        for( const std::string& line : c.lines )
+            if( line.compare( 0, prefix.size(), prefix ) == 0 && line.find( name ) != std::string::npos )
+                found = true;
+        if( !found )
+            std::fprintf( stderr, "FAIL  response %s has no decode vector\n", name.c_str() );
+        TEST_CHECK( found );
+    }
+
+    // --- every status bit ---
+    for( size_t i = 0; i < StatusBitCount(); ++i )
+    {
+        const StatusBitInfo& bit = StatusBitAt( i );
+        char needle[ 96 ];
+        std::snprintf( needle, sizeof( needle ), "    %s  bit %u = 1", bit.name, static_cast<unsigned>( bit.bit ) );
+        if( !coverage::Contains( c, needle ) )
+            std::fprintf( stderr, "FAIL  status bit %s has no decode vector\n", bit.name );
+        TEST_CHECK( coverage::Contains( c, needle ) );
+    }
 }
 
 // Offset 044h bits 15:8, p.105. A capability mask whose bit positions are not
@@ -2014,7 +2196,8 @@ int main()
     TestFlashEraseSizes();
     TestChannel3ExtensionRegisters();
     TestTargetEraseBlockField();
-    TestEveryCycleTypeHasAVector();
+    TestDecodeCoverage();
+    TestDecodeCoverageVectors();
     TestWaitState();
     TestMalformed();
     TestFixtureLoaderRejectsGarbage();

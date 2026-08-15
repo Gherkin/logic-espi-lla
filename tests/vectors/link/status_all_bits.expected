@@ -1,0 +1,42 @@
+Command
+  Opcode  0x25  GET_STATUS
+  CRC  0xFB  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x33FF
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    PC_AVAIL  bit 4 = 1
+    NP_AVAIL  bit 5 = 1
+    VWIRE_AVAIL  bit 6 = 1
+    OOB_AVAIL  bit 7 = 1
+    FLASH_C_FREE  bit 8 = 1
+    FLASH_NP_FREE  bit 9 = 1
+    FLASH_C_AVAIL  bit 12 = 1
+    FLASH_NP_AVAIL  bit 13 = 1
+  CRC  0x1F  ok
+---
+Command
+  Opcode  0x25  GET_STATUS
+  CRC  0xFB  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0xFFFF
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    PC_AVAIL  bit 4 = 1
+    NP_AVAIL  bit 5 = 1
+    VWIRE_AVAIL  bit 6 = 1
+    OOB_AVAIL  bit 7 = 1
+    FLASH_C_FREE  bit 8 = 1
+    FLASH_NP_FREE  bit 9 = 1
+    FLASH_C_AVAIL  bit 12 = 1
+    FLASH_NP_AVAIL  bit 13 = 1
+    Reserved  0xCC00  must be driven to 0 [!]
+  CRC  0x75  ok

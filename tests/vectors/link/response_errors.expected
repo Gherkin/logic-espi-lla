@@ -1,0 +1,34 @@
+Command
+  Opcode  0x01  GET_PC
+  CRC  0x07  ok
+TAR  2 clocks
+Response
+  Response  0x02  NON_FATAL_ERROR [!]
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x12  ok
+---
+Command
+  Opcode  0x01  GET_PC
+  CRC  0x07  ok
+TAR  2 clocks
+Response
+  Response  0x03  FATAL_ERROR [ERROR]
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x79  ok
+---
+Command
+  Opcode  0x25  GET_STATUS
+  CRC  0xFB  ok
+TAR  2 clocks
+Response
+  Response  0xFF  NO_RESPONSE [!]

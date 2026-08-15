@@ -31,3 +31,37 @@ Response
     OOB_FREE  bit 3 = 1
     FLASH_C_FREE  bit 8 = 1
   CRC  0x95  ok
+---
+Command
+  Opcode  0x45  PUT_IOWR_SHORT
+  Request Length  2 bytes
+  Address  0x0062
+  Data  2 bytes  AA 55
+  CRC  0x00  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok
+---
+Command
+  Opcode  0x4B  PUT_MEMRD32_SHORT
+  Request Length  4 bytes
+  Address  0xFED40010
+  CRC  0x44  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  4 bytes  DE AD BE EF
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x41  ok

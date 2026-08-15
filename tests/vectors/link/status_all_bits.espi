@@ -1,0 +1,42 @@
+# Every status bit, and the reserved spans.
+#
+# HAND BUILT FROM THE SPECIFICATION. Every status word in the capture is 010Fh
+# — the same five bits, on every one of its 857 lines — so seven of Table 4's
+# twelve bits had never been rendered by anything, and neither had the reserved
+# warning.
+#
+# The bits are all one code path, so this is not about finding a decode bug. It
+# is about the names: a bit whose name has never been printed is a name nobody
+# has ever read out of this decoder, and Figure 16's stored description gets
+# four of these positions wrong (it puts the flash bits at 15-14 and 13-12).
+#
+# --- 1. Every defined bit set, no reserved bits ---
+#
+#   25     GET_STATUS
+#   FB     CRC
+#
+#   08     ACCEPT
+#   FF 33  Status 33FFh, least significant byte first (section 5.1, p.86)
+#   1F     CRC
+#
+# 33FFh is bits 0-9 and 12-13: the twelve bits Table 4 pp.31-33 defines, and no
+# others. Bits 11:10 and 15:14 are Reserved and stay clear here.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4).
+CMD 25 FB
+TAR
+RSP 08 FF 33 1F
+
+# --- 2. Every bit set, reserved spans included ---
+#
+# FFFFh, so the two reserved spans carry CC00h between them. §6.2 requires them
+# to be driven to zero, so this is the target misbehaving and the decoder says
+# so — the only fixture in the suite that reaches that path.
+#
+# The reserved mask is the reason this matters: read from Figure 16's stored
+# description the flash bits sit at 15:12 and the mask would be F000h. Read off
+# the page they sit at 8, 9, 12 and 13, so it is CC00h. Only a word with those
+# bits set can tell the two apart in a decode.
+CMD 25 FB
+TAR
+RSP 08 FF FF 75

@@ -1,0 +1,64 @@
+# The four System Event wires nothing else decodes.
+#
+# HAND BUILT FROM THE SPECIFICATION. The capture only ever answers GET_VWIRE at
+# index 05h or 40h.
+#
+# SUS_STAT#, SMIOUT#, ERROR_NONFATAL and ERROR_FATAL are masked in every
+# existing vwire fixture — deliberately, because those fixtures exist to show
+# that a clear valid bit means the level is not being updated. The masking is
+# worth keeping, so the wires get their own packet here rather than a rewrite of
+# the ones that demonstrate it.
+#
+# --- 1. PUT_VWIRE, indices 3 and 7, every real wire valid ---
+#
+# Both are Controller to Target — Tables 10 and 14, pp.64 and 68 — which is what
+# a PUT_VWIRE from the controller carries. Two groups, so the 0-based count byte
+# is 01h.
+#
+#   03h data 77h -- valid bits 6, 5 and 4 set; bit 7 stays clear because bit 3
+#                   is RSV and a reserved wire has nothing to validate.
+#                   OOB_RST_WARN level 1: active high, so asserted.
+#                   PLTRST#      level 1: active low,  so deasserted.
+#                   SUS_STAT#    level 1: active low,  so deasserted.
+#
+#                   Three wires, one byte, two polarities. SUS_STAT# and
+#                   OOB_RST_WARN carry the same level bit and mean opposite
+#                   things, which is the whole reason the Polarity column is
+#                   transcribed.
+#
+#   07h data 74h -- NMIOUT#       level 1: active low,  deasserted.
+#                   SMIOUT#       level 0: active low,  asserted.
+#                   HOST_RST_WARN level 0: active high, deasserted.
+#
+#                   Same trick the other way up: SMIOUT# and HOST_RST_WARN are
+#                   both level 0 and only one of them is asserted.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4).
+CMD 04 01 03 77 07 74 AD
+TAR
+RSP 08 0F 01 95
+
+# --- 2. GET_VWIRE, index 5, all four wires valid ---
+#
+# Index 5 is Target to Controller (Table 12, pp.66-67), so it belongs in a
+# GET_VWIRE response. get_vwire_boot_done.espi reaches this index off real
+# hardware but with three of the four wires masked.
+#
+#   05h data FDh -- every valid bit set.
+#                   TARGET_BOOT_LOAD_STATUS level 1.
+#                   ERROR_NONFATAL          level 1: active high, asserted.
+#                   ERROR_FATAL             level 0: active high, deasserted.
+#                   TARGET_BOOT_LOAD_DONE   level 1: active high, asserted.
+#
+# TARGET_BOOT_LOAD_STATUS is the one wire in all six tables whose Polarity cell
+# reads "As defined above" rather than naming a polarity: '0' and '1' are a
+# corrupted and an intact boot image, not an asserted and a released signal. So
+# it gets its level and no claim about assertion, while the three wires beside
+# it in the same byte get both.
+#
+# A target reporting boot load done with a non-fatal error outstanding is also
+# the state this pair of wires exists to express, so it is worth having one
+# packet that says it.
+CMD 05 1B
+TAR
+RSP 08 00 05 FD 0F 01 38

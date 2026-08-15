@@ -1,0 +1,58 @@
+# The three response codes nothing else decodes.
+#
+# HAND BUILT FROM THE SPECIFICATION. The capture is a link coming up and every
+# response in it is ACCEPT, so FATAL_ERROR, NON_FATAL_ERROR and NO_RESPONSE had
+# never been decoded — and unlike the status bits, these three are not one code
+# path. Each does something different to the rest of the phase.
+#
+# --- 1. NON_FATAL_ERROR on a shape that would otherwise carry a completion ---
+#
+# GET_PC's response is `ACCEPT HDR DATA STS CRC`. Answered with an error it is
+# `NON_FATAL_ERROR STS CRC` — no header, no data. Figure 63, p.117, draws it,
+# and the page states it in words: "The Response with Non-Fatal Error comprises
+# a Response, a Status and a CRC. There is neither Header nor Data field during
+# the Response phase."
+#
+# That sentence is the whole evidence for the OOB and flash shapes, which have
+# no transaction figure of their own. Nothing decoded it until now.
+#
+# Getting it wrong is not cosmetic: the decoder would read three header bytes
+# out of the status and CRC, and the CRC would land on nothing.
+#
+#   01     GET_PC
+#   07     CRC
+#
+#   02     NON_FATAL_ERROR      Table 3, p.30. Reported as a warning.
+#   0F 01  Status
+#   12     CRC
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4).
+CMD 01 07
+TAR
+RSP 02 0F 01 12
+
+# --- 2. FATAL_ERROR, the same shape at a higher severity ---
+#
+# Figure 62, p.117, draws the identical response phase. The two codes differ
+# only in what the decoder should say about them: "The eSPI target returns a
+# Non-Fatal error in response to a command which is erroneous but does not
+# impede the processing of the command and the forward progress of the bus"
+# (p.117), where a fatal error does.
+CMD 01 07
+TAR
+RSP 03 0F 01 79
+
+# --- 3. NO_RESPONSE, where the phase simply is not driven ---
+#
+# The response byte is FFh and there is nothing after it. Not a truncated
+# packet: the target never drove the phase at all, so there is no status and no
+# CRC to read, and the fixture ends here on purpose.
+#
+# FFh shares its low nibble with WAIT_STATE's 1111b. Table 3 note 1, p.30, is
+# what separates them — R1R0 is "always 00" except on NO_RESPONSE, where it is
+# 11. A decoder that masks to the low nibble first classifies this as a wait
+# state and then sits waiting for a response the specification says will never
+# come.
+CMD 25 FB
+TAR
+RSP FF

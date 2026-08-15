@@ -1,0 +1,42 @@
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0004  Device Identification
+  CRC  0x34  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000001
+    Version ID  0x01
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x07  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0040  Channel 3 Capabilities and Configurations
+  CRC  0xEF  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x9B233A6F
+    RPMC OP1 Opcode on the 1st RPMC Flash device  0x9B
+    RPMC Counter on the 1st RPMC Flash device  2  resolves to 3
+    Flash Sharing Capability Supported  0x3  target attached: yes, controller attached: yes
+    Flash Access Channel Maximum Read Request Size  0x3  256 bytes
+    Flash Sharing Mode  0x1  target attached flash sharing
+    Flash Access Channel Maximum Payload Size Selected  0x2  128 bytes
+    Flash Access Channel Maximum Payload Size Supported  0x3  256 bytes
+    Flash Block Erase Size  0x3  4 Kbytes and 64 Kbytes
+    Flash Access Channel Ready  1
+    Flash Access Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xC9  ok

@@ -1,0 +1,47 @@
+Command
+  Opcode  0x04  PUT_VWIRE
+  Virtual Wire Packet  2 groups
+    Count  0x01  2 groups
+    Index  0x03  System Event, controller to target
+    Data  0x77
+      OOB_RST_WARN  bit 2 = 1  high, asserted
+      PLTRST#  bit 1 = 1  high, deasserted
+      SUS_STAT#  bit 0 = 1  high, deasserted
+    Index  0x07  System Event, controller to target
+    Data  0x74
+      NMIOUT#  bit 2 = 1  high, deasserted
+      SMIOUT#  bit 1 = 0  low, asserted
+      HOST_RST_WARN  bit 0 = 0  low, deasserted
+  CRC  0xAD  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok
+---
+Command
+  Opcode  0x05  GET_VWIRE
+  CRC  0x1B  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Virtual Wire Packet  1 group
+    Count  0x00  1 group
+    Index  0x05  System Event, target to controller
+    Data  0xFD
+      TARGET_BOOT_LOAD_STATUS  bit 3 = 1  high
+      ERROR_NONFATAL  bit 2 = 1  high, asserted
+      ERROR_FATAL  bit 1 = 0  low, deasserted
+      TARGET_BOOT_LOAD_DONE  bit 0 = 1  high, asserted
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x38  ok

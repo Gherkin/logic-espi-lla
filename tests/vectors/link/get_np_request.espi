@@ -1,0 +1,32 @@
+# GET_NP: the target issues a non-posted request to the controller.
+#
+# HAND BUILT FROM THE SPECIFICATION. The capture has no peripheral traffic.
+#
+# The last peripheral shape with no decode behind it. GET_NP is the mirror of
+# GET_PC — bare command, packet in the response — but Figure 27, p.41, draws its
+# response as `ACCEPT HDR STS CRC` where Figure 25 draws GET_PC's as `ACCEPT HDR
+# DATA STS CRC`. The difference is not in the shape table: both rows name
+# CycleHeader and Payload, and the cycle type decides whether any data follows.
+# Here it is a read request, so the Length is a size being *asked for* and no
+# bytes come with it.
+#
+#   03     GET_NP                              Table 2, p.25
+#   09     CRC
+#
+#   08     ACCEPT
+#   00     Cycle Type: Memory Read 32          Table 5, p.47
+#   50     Tag 5, Length[11:8] = 0h
+#   04     Length[7:0] = 04h -> 4 bytes requested
+#
+#          Section 4.1.3, p.50: "For memory read and Flash Read, the length
+#          field specifies the data payload size requested." A decoder that
+#          emitted a payload here would read four bytes out of the address.
+#
+#   00 40 00 00   Address, most significant byte first
+#   0F 01  Status
+#   DB     CRC
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4).
+CMD 03 09
+TAR
+RSP 08 00 50 04 00 40 00 00 0F 01 DB

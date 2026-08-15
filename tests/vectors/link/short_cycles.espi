@@ -52,3 +52,23 @@ RSP 08 AA 55 0F 01 5A
 CMD 4F FE D4 00 10 01 02 03 04 C3
 TAR
 RSP 08 0F 01 95
+
+# PUT_IOWR_SHORT with C1C0 = 01b -> 2 bytes. Opcode 45h.
+#
+# The write twin of the first transaction above, and the only one of the four
+# short cycles whose command carries both an address and data. Figure 26, p.40,
+# draws its response as `RESPONSE STS CRC` -- nothing between, because the data
+# went the other way.
+CMD 45 00 62 AA 55 00
+TAR
+RSP 08 0F 01 95
+
+# PUT_MEMRD32_SHORT with C1C0 = 11b -> 4 bytes. Opcode 4Bh.
+#
+# The last of the four. Its response carries raw data with no completion header
+# at all -- Figure 26, p.40, again -- where the long form's response in Figure
+# 24 has a full header. Four data bytes here, so a decoder that took the length
+# from anywhere but the opcode misplaces the status and the CRC.
+CMD 4B FE D4 00 10 44
+TAR
+RSP 08 DE AD BE EF 0F 01 41

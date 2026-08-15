@@ -1,0 +1,70 @@
+# Offsets 004h and 040h — the two registers with a layout that nothing decodes.
+#
+# HAND BUILT FROM THE SPECIFICATION. The capture only ever reads 0020h and
+# 0030h.
+#
+# 040h matters more than the coverage gap suggests: it is the register that
+# decides what a Flash Erase Length means, and its Flash Block Erase Size field
+# is the one that reads almost identically to a completely different field at
+# 044h.
+#
+# --- 1. Offset 004h, Device Identification ---
+#
+#   21     GET_CONFIGURATION
+#   00 04  Address, most significant byte first
+#   34     CRC
+#
+#   08     ACCEPT
+#   01 00 00 00   Data, least significant byte first -> 00000001h
+#   0F 01  Status
+#   07     CRC
+#
+# Version ID 01h, p.94, which is what this revision of the specification
+# advertises. Bits 31:8 are Reserved and read as zero, so they are not rendered.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4).
+CMD 21 00 04 34
+TAR
+RSP 08 01 00 00 00 0F 01 07
+
+# --- 2. Offset 040h, Channel 3 Capabilities and Configurations ---
+#
+#   Data 9B233A6Fh, on the wire least significant byte first.
+#
+#   31:24  9Bh    RPMC OP1 Opcode on the 1st RPMC Flash device
+#   23:20  2h     RPMC Counter on the 1st RPMC Flash device
+#                 "Per RPMC SFDP specification, it is a 0-based number" (p.101),
+#                 so 2h is 3 counters. Contrast 044h's Target RPMC Supported,
+#                 which the page calls 1-based and where the value IS the count.
+#   19:18  0h     Reserved
+#   17:16  11b    Flash Sharing Capability Supported -> both schemes supported
+#   15     0h     Reserved
+#   14:12  011b   Flash Access Channel Maximum Read Request Size -> 256 bytes
+#   11     1b     Flash Sharing Mode -> target attached flash sharing
+#
+#                 THIS BIT IS WHAT PICKS BETWEEN TABLE 16'S TWO ERASE SIZE
+#                 LISTS. It is the only statement anywhere of which scheme is in
+#                 operation, it is set before the channel comes up, and it never
+#                 appears in a packet — which is why a Flash Erase Length is
+#                 decoded as both readings at once.
+#
+#   10:8   010b   Flash Access Channel Maximum Payload Size Selected -> 128 bytes
+#   7:5    011b   Flash Access Channel Maximum Payload Size Supported -> 256 bytes
+#   4:2    011b   Flash Block Erase Size -> 4 Kbytes and 64 Kbytes
+#
+#                 An ENCODED VALUE, and 011b is the encoding §4.2.4.1 p.79 says
+#                 "is not applicable for Flash Erase in Controller Attached
+#                 Flash Sharing". Consistent: a capability of *both* sizes is
+#                 not a size a single erase request could name.
+#
+#                 The near-identically named Target Flash Erase Block Size at
+#                 044h bits 15:8 is a bit mask, not an encoded value, and this
+#                 fixture and config_flash_rpmc.espi decode the two side by side
+#                 so the difference is visible in the output rather than only in
+#                 the header comments.
+#
+#   1      1b     Flash Access Channel Ready
+#   0      1b     Flash Access Channel Enable
+CMD 21 00 40 EF
+TAR
+RSP 08 6F 3A 23 9B 0F 01 C9

@@ -11,6 +11,13 @@ endfunction()
 espi_add_core_test(test_crc)
 espi_add_core_test(test_lanes)
 espi_add_core_test(test_opcodes)
+espi_add_core_test(test_link)
+
+# Fixtures and their expected decodes are read at run time rather than baked
+# into the binary, so a reviewer can read the literal bytes and the literal
+# text side by side without going through C++ string escaping.
+target_compile_definitions(test_link PRIVATE
+    ESPI_VECTOR_DIR="${CMAKE_CURRENT_SOURCE_DIR}/vectors")
 
 # ---------------------------------------------------------------------------
 #  Rule R3: the specification-derived tables must be unreachable from here.

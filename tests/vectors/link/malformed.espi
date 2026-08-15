@@ -1,0 +1,24 @@
+# Malformed traffic. Hand built -- the capture is a clean link coming up.
+#
+# A bench analyzer meets all of these. Each must produce an error field and
+# stop, never a confident wrong decode, and never a read past the phase.
+#
+# 1. An opcode Table 2 does not define. 0Ch sits in the gap between the flash
+#    opcodes and the channel-independent ones.
+CMD 0C 00
+
+# 2. A defined opcode whose packet shape has not been transcribed yet.
+#    PUT_PC is real (Table 2, p.25) but its header needs the cycle-type
+#    layouts, which are stage D. The decoder must say so rather than guess a
+#    length.
+CMD 00 00
+
+# 3. A good GET_CONFIGURATION command with one bit flipped in the CRC byte.
+#    C9h where the capture has C8h.
+CMD 21 00 20 C9
+TAR
+RSP 08 00 0B 00 00 0F 01 91
+
+# 4. Chip select deasserting mid-header: the address field is one byte short
+#    and there is no CRC at all.
+CMD 21 00

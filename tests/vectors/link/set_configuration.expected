@@ -1,0 +1,15 @@
+Command
+  Opcode  0x22  SET_CONFIGURATION
+  Address  0x0020
+  Data  0x00070001
+  CRC  0x01  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok

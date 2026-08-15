@@ -1,0 +1,20 @@
+# GET_STATUS answered with a virtual wire packet appended.
+#
+# HAND BUILT FROM THE SPECIFICATION, NOT FROM THE CAPTURE. espi_dump.txt has
+# no GET_STATUS in it at all, so nothing independent confirms these bytes.
+#
+# This is the one place the response byte carries more than a response code.
+# 88h is R1R0=10b, RSV=00b, code=1000b -- ACCEPT with "a Virtual Wire (channel
+# 1) packet is appended" (Table 3 Note 1, p.30; Figure 21, p.36). The appended
+# packet sits ahead of the status trailer, so the response phase runs
+# response, count, index, data, status, CRC.
+#
+# Getting the modifier wrong here does not corrupt one label -- it changes how
+# many bytes the response phase has, so the CRC lands on the wrong byte and
+# the whole transaction misdecodes.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4): FBh over {25}, 73h over
+# {88 00 05 88 0F 01}.
+CMD 25 FB
+TAR
+RSP 88 00 05 88 0F 01 73

@@ -1,0 +1,9 @@
+# SET_CONFIGURATION of register 0020h, and its ACCEPT response.
+#
+# Transcribed byte for byte from tests/vectors/espi_dump.txt, lines 30-43.
+#
+# Command carries the DWord, response carries only the status trailer -- the
+# mirror image of GET_CONFIGURATION. Figure 23, p.37.
+CMD 22 00 20 01 00 07 00 01
+TAR
+RSP 08 0F 01 95

@@ -1,0 +1,18 @@
+# GET_STATUS answered after two WAIT_STATE bytes.
+#
+# HAND BUILT FROM THE SPECIFICATION, NOT FROM THE CAPTURE. Read this before
+# trusting it: espi_dump.txt contains no wait states and no GET_STATUS at all,
+# so unlike the three fixtures beside it, nothing independent confirms these
+# bytes ever appeared on a real bus. It is the weakest evidence in the suite.
+#
+# What it does pin is the CRC exclusion, and it pins it sharply. WAIT_STATE is
+# 0Fh (Table 3, p.30) and is excluded from the CRC calculation (section 3.10,
+# p.45). The trailing 95h is the CRC over 08 0F 01 only. If a decoder folded
+# either wait state into the CRC it would compute something else and this
+# fixture would fail -- which is the entire reason it exists.
+#
+# CRC bytes are pasted from tools/crc_ref.py, which is not linked into
+# anything (rule R4): FBh over {25}, 95h over {08 0F 01}.
+CMD 25 FB
+TAR
+RSP 0F 0F 08 0F 01 95

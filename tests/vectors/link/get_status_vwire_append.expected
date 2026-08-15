@@ -1,0 +1,18 @@
+Command
+  Opcode  0x25  GET_STATUS
+  CRC  0xFB  ok
+TAR  2 clocks
+Response
+  Response  0x88  ACCEPT
+    Modifier  Virtual Wire (channel 1) packet appended
+  Virtual Wire Packet  1 group
+    Count  0x00  1 group
+    Index  0x05
+    Data  0x88
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x73  ok

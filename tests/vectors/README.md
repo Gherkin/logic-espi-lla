@@ -10,6 +10,32 @@ out-of-tree tool and paste the result as a literal:
 
     ./tools/crc_ref.py 21 00 20
 
+## `link/` — link layer fixtures
+
+Hex bytes with phase markers, one transaction per `CMD`/`TAR`/`RSP` group:
+
+    # where these bytes came from
+    CMD 21 00 20 C8
+    TAR
+    RSP 08 00 0B 00 00 0F 01 91
+
+Each has a `.expected` beside it holding the decode written out longhand.
+
+The fixture states where the command phase ends; the decoder works that out
+independently from the opcode and the packet shape table. They are compared,
+so the split is a check on the decoder's length arithmetic and never a hint to
+it. `tests/support/FixtureByteSource.h` deliberately knows no protocol.
+
+**Three of these came off real hardware** — `get_configuration`,
+`set_configuration` and `get_vwire` are transcribed from `espi_dump.txt` with
+the source line numbers recorded in each file.
+
+**The rest are hand built and say so in their own headers.** The capture is a
+clean link coming up: it contains no wait states, no `GET_STATUS`, and nothing
+malformed. Those fixtures are constructed from the specification by the same
+person who wrote the decoder, so they catch a decoder that disagrees with that
+reading — not a reading that is wrong. Keep the distinction visible.
+
 ## `espi_dump.txt`
 
 857 lines of an eSPI link coming up, exported from a third-party decoder

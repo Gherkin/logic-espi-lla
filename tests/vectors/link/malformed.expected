@@ -1,0 +1,26 @@
+Command
+  Opcode  0x0C  not a defined command opcode [ERROR]
+---
+Command
+  Opcode  0x00  PUT_PC
+  Packet Shape  no shape transcribed for PUT_PC -- packet length unknown, decode stopped [ERROR]
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0020
+  CRC  0xC9  BAD, computed 0xC8 [ERROR]
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000B00
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x91  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+TRUNCATED  chip select deasserted mid-packet [ERROR]

@@ -116,6 +116,100 @@
       "find": "X( GET_OOB, 0x07, 0xFF, Oob, false )",
       "replace": "X( GET_OOB, 0x07, 0xFF, Flash, false )",
       "tests": "test_opcodes"
+    },
+
+    {
+      "label": "response: ACCEPT code 1000b -> 1001b",
+      "file": "src/core/tables/Responses.h",
+      "find": "X( ACCEPT, 0x8 )",
+      "replace": "X( ACCEPT, 0x9 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "response: WAIT_STATE code 1111b -> 1110b",
+      "file": "src/core/tables/Responses.h",
+      "find": "X( WAIT_STATE, 0xF )",
+      "replace": "X( WAIT_STATE, 0xE )",
+      "tests": "test_link"
+    },
+    {
+      "label": "response: NON_FATAL_ERROR code 0010b -> 0100b",
+      "file": "src/core/tables/Responses.h",
+      "find": "X( NON_FATAL_ERROR, 0x2 )",
+      "replace": "X( NON_FATAL_ERROR, 0x4 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "response: NO_RESPONSE byte FFh -> FEh",
+      "file": "src/core/tables/Responses.h",
+      "find": "#define ESPI_RESPONSE_NO_RESPONSE_BYTE 0xFF",
+      "replace": "#define ESPI_RESPONSE_NO_RESPONSE_BYTE 0xFE",
+      "tests": "test_link"
+    },
+    {
+      "label": "response: virtual wire append modifier 10b -> 01b",
+      "file": "src/core/tables/Responses.h",
+      "find": "X( 0x2, \"Virtual Wire (channel 1) packet appended\" )",
+      "replace": "X( 0x1, \"Virtual Wire (channel 1) packet appended\" )",
+      "tests": "test_link"
+    },
+
+    {
+      "label": "status: PC_FREE moved off bit 0",
+      "file": "src/core/tables/Status.h",
+      "find": "X( PC_FREE, 0 )",
+      "replace": "X( PC_FREE, 4 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "status: FLASH_C_FREE at bit 15 (the mis-extracted layout)",
+      "file": "src/core/tables/Status.h",
+      "find": "X( FLASH_C_FREE, 8 )",
+      "replace": "X( FLASH_C_FREE, 15 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "status: swap VWIRE_AVAIL and OOB_AVAIL",
+      "file": "src/core/tables/Status.h",
+      "find": "X( VWIRE_AVAIL, 6 )",
+      "replace": "X( VWIRE_AVAIL, 7 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "status: reserved mask 11:10,15:14 -> 15:12",
+      "file": "src/core/tables/Status.h",
+      "find": "#define ESPI_STATUS_RESERVED_MASK 0xCC00u",
+      "replace": "#define ESPI_STATUS_RESERVED_MASK 0xF000u",
+      "tests": "test_link"
+    },
+
+    {
+      "label": "shape: GET_CONFIGURATION response loses its data DWord",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "X( GET_CONFIGURATION, ESPI_CMD( Addr16 ), ESPI_RSP( Data32, Status16 ) )",
+      "replace": "X( GET_CONFIGURATION, ESPI_CMD( Addr16 ), ESPI_RSP( Status16 ) )",
+      "tests": "test_link"
+    },
+    {
+      "label": "shape: SET_CONFIGURATION data moved to the response phase",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "X( SET_CONFIGURATION, ESPI_CMD( Addr16, Data32 ), ESPI_RSP( Status16 ) )",
+      "replace": "X( SET_CONFIGURATION, ESPI_CMD( Addr16 ), ESPI_RSP( Data32, Status16 ) )",
+      "tests": "test_link"
+    },
+    {
+      "label": "shape: GET_VWIRE response loses its virtual wire packet",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "X( GET_VWIRE, ESPI_CMD(), ESPI_RSP( VwirePacket, Status16 ) )",
+      "replace": "X( GET_VWIRE, ESPI_CMD(), ESPI_RSP( Status16 ) )",
+      "tests": "test_link"
+    },
+    {
+      "label": "shape: GET_STATUS given a spurious address field",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "X( GET_STATUS, ESPI_CMD(), ESPI_RSP( Status16 ) )",
+      "replace": "X( GET_STATUS, ESPI_CMD( Addr16 ), ESPI_RSP( Status16 ) )",
+      "tests": "test_link"
     }
   ]
 }

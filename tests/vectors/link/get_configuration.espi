@@ -1,0 +1,10 @@
+# GET_CONFIGURATION of register 0020h, and its ACCEPT response.
+#
+# Transcribed byte for byte from tests/vectors/espi_dump.txt, lines 16-29 --
+# a third-party decoder's export of real hardware. Nothing here is computed.
+#
+# The address goes out MSB first (00 then 20 = 0020h) while the DWord comes
+# back LSB first (00 0B 00 00 = 00000B00h). Section 5.1, p.86.
+CMD 21 00 20 C8
+TAR
+RSP 08 00 0B 00 00 0F 01 91

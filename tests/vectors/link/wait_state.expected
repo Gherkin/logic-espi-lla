@@ -1,0 +1,14 @@
+Command
+  Opcode  0x25  GET_STATUS
+  CRC  0xFB  ok
+TAR  2 clocks
+Response
+  WAIT_STATE  2 byte-times of delay, excluded from CRC
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok

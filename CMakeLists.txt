@@ -30,6 +30,10 @@ add_library(espi_core STATIC
     src/core/src/LaneCodec.cpp
     src/core/src/Decode.cpp
     src/core/src/Opcodes.cpp
+    src/core/src/Responses.cpp
+    src/core/src/Status.cpp
+    src/core/src/PacketShapes.cpp
+    src/core/src/LinkDecoder.cpp
 )
 
 target_include_directories(espi_core

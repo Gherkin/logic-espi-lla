@@ -44,6 +44,29 @@ GROUP_RE = re.compile(r"^\s*/\*\s*-*\s*(.*?)\s*-*\s*\*/\s*\\?\s*$")
 CONTINUATION_RE = re.compile(r"^//\s{9,}(\S.*?)\s*$")
 
 
+def split_args(text: str) -> list:
+    """Split a table row's arguments on top-level commas only.
+
+    A cell may itself contain a parenthesised list -- the packet shape table
+    has `ESPI_CMD( Addr16, Data32 )` as a single argument. Splitting naively
+    tears that into two cells and the worksheet shows a row that does not
+    correspond to anything in the header, which is worse than showing nothing.
+    """
+    args, depth, current = [], 0, ""
+    for ch in text:
+        if ch == "," and depth == 0:
+            args.append(current.strip())
+            current = ""
+            continue
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth -= 1
+        current += ch
+    args.append(current.strip())
+    return [a for a in args if a]
+
+
 def parse_header(path: Path) -> dict:
     lines = path.read_text(encoding="utf-8").splitlines()
     banner = {"title": None, "source": ""}
@@ -92,7 +115,7 @@ def parse_header(path: Path) -> dict:
                 continue
             m = ENTRY_RE.match(line)
             if m:
-                args = [a.strip() for a in m.group(1).split(",")]
+                args = split_args(m.group(1))
                 current["entries"].append((group, args, m.group(2) or ""))
                 continue
             if line.strip() == "" or not line.rstrip().endswith("\\"):

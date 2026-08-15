@@ -1,0 +1,64 @@
+# PUT_NP carrying Memory Read requests, answered with DEFER.
+#
+# HAND BUILT FROM THE SPECIFICATION. See put_pc_memory_write32.espi for why
+# every peripheral fixture has to be.
+#
+# Three things this pins that nothing else does.
+#
+# 1. A LENGTH OF ALL ZEROS IS 4 KB, NOT ZERO. Section 4.1.3, p.50: "The length
+#    field is 1-based. A value of all zeros indicates 4 KB of length." Table 5
+#    does not say this and no packet figure hints at it, so a decoder written
+#    from the table alone prints "0 bytes" here -- wrong, and wrong in the one
+#    case that carries the most data. A Memory Read request is where this can
+#    be shown cheaply: the length is the size being *asked for*, so the field
+#    is fully meaningful while the packet itself carries no payload.
+#
+# 2. DEFER CARRIES NO COMPLETION. Figures 24 and 25, pp.38-39, are the same
+#    PUT_NP answered two ways -- `ACCEPT HDR DATA STS CRC` and `DEFER STS CRC`.
+#    That is not a labelling difference: it changes how many bytes the response
+#    phase holds, so a decoder that always expects a completion header puts the
+#    CRC three bytes early and reports a good transaction as corrupt.
+#
+# 3. THE 64-BIT FORM HAS AN 11-BYTE HEADER, not 7. Figure 36, p.54.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4).
+
+# Memory Read 32 of a whole 4 KB page. Tag 0, Length 000h.
+CMD 02 00 00 00 FE D4 00 00 65
+TAR
+RSP 01 0F 01 AF
+
+# Memory Read 64 of 64 bytes at 1_0000_0000h -- the first address above 4 GB,
+# which is where section 4.1.4 p.51 says the 64-bit form starts being legal.
+CMD 02 02 00 40 00 00 00 01 00 00 00 00 FC
+TAR
+RSP 01 0F 01 AF
+
+# The same command answered as a CONNECTED completion. Figure 24, p.38, draws
+# PUT_NP turning into `ACCEPT HDR DATA STS CRC` -- so a PUT_NP can carry a
+# header in both phases, and the response one is a completion answering the
+# request the command just made.
+#
+# This is the transaction that makes the response-side cycle header observable.
+# Every other PUT_NP here is deferred, and a shape that dropped the response
+# header entirely would decode all of those perfectly.
+#
+#   02 00 30 04 FE D4 00 00   PUT_NP, Memory Read 32, tag 3, 4 bytes
+#   08                        ACCEPT
+#   0F 30 04 11 22 33 44      Successful Completion With Data, "only
+#                             completion", tag 3, 4 bytes -- the tag matches
+#                             the request, which is what section 4.1.2 p.50
+#                             means by using Tag to pair the two.
+CMD 02 00 30 04 FE D4 00 00 4F
+TAR
+RSP 08 0F 30 04 11 22 33 44 0F 01 A1
+
+# The same request pointed below 4 GB. Section 4.1.4, p.51: "For addresses
+# below 4 GB, the memory transactions must use the 32 bits addressing format.
+# When 64 bits addressing format is used, the upper 32 bits address [63:32]
+# must not be all 0." The transaction is well formed in every other respect
+# and reaches the right address, so nothing else on the bus flags it -- the
+# same shape of finding as a config address with its top four bits set.
+CMD 02 02 00 40 00 00 00 00 FE D4 00 00 DD
+TAR
+RSP 01 0F 01 AF

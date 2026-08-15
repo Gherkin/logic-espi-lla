@@ -1,0 +1,30 @@
+# GET_PC fetching a Successful Completion With Data.
+#
+# HAND BUILT FROM THE SPECIFICATION. See put_pc_memory_write32.espi.
+#
+# This is the mirror image of PUT_PC: the command is bare and the *response*
+# carries the packet. Figure 25 p.39 draws it as `GET_PC CRC` turning into
+# `ACCEPT HDR DATA STS CRC`, and Figure 27 p.41 draws GET_NP the same way with
+# a header and no data. Which side carries the packet is not something the
+# opcode's name settles -- PUT_NP has a header in both phases.
+#
+#   01     GET_PC                                Table 2, p.25
+#   07     CRC
+#
+#   08     ACCEPT
+#   0F     Cycle Type: 00001 P1P0 1 with P1P0 = 11b
+#          Successful Completion With Data, "only completion for a split
+#          transaction" -- Table 5 p.48 and note 1 p.49.
+#
+#          The raised 1 between P0 and the final bit on p.48 is a FOOTNOTE
+#          MARKER. Extraction renders the cell as "00001P 1 P 0 1 1", which
+#          reads as nine bits, and taking that literally shifts every
+#          completion encoding by one place.
+#   30     Tag 3, Length[11:8] = 0h              Figure 39, p.55
+#   02     Length[7:0] = 02h -> 2 bytes
+#   AA 55  Data Byte 0 and 1
+#   0F 01  Status
+#   43     CRC
+CMD 01 07
+TAR
+RSP 08 0F 30 02 AA 55 0F 01 43

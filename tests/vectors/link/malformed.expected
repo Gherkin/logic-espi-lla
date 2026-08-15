@@ -2,8 +2,8 @@ Command
   Opcode  0x0C  not a defined command opcode [ERROR]
 ---
 Command
-  Opcode  0x00  PUT_PC
-  Packet Shape  no shape transcribed for PUT_PC -- packet length unknown, decode stopped [ERROR]
+  Opcode  0x06  PUT_OOB
+  Packet Shape  no shape transcribed for PUT_OOB -- packet length unknown, decode stopped [ERROR]
 ---
 Command
   Opcode  0x21  GET_CONFIGURATION
@@ -79,3 +79,11 @@ Response
     OOB_FREE  bit 3 = 1
     FLASH_C_FREE  bit 8 = 1
   CRC  0x2E  ok
+---
+Command
+  Opcode  0x00  PUT_PC
+  Cycle Type  0x21  no cycle type with this encoding on the Peripheral channel -- packet length unknown, decode stopped [ERROR]
+---
+Command
+  Opcode  0x42  PUT_IORD_SHORT
+  Request Length  C1C0 = 10b is Reserved -- packet length unknown, decode stopped [ERROR]

@@ -1,0 +1,20 @@
+Command
+  Opcode  0x00  PUT_PC
+  Cycle Type  0x01  Memory Write 32
+    Command Type  Posted
+    Direction  either direction
+  Tag  0x3
+  Length  0x004  4 bytes
+  Address  0xFED40000
+  Data  4 bytes  DE AD BE EF
+  CRC  0x26  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok

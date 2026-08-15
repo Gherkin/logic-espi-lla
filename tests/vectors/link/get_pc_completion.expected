@@ -1,0 +1,20 @@
+Command
+  Opcode  0x01  GET_PC
+  CRC  0x07  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Cycle Type  0x0F  Successful Completion With Data
+    Command Type  Completion
+    Direction  either direction
+    Split Completion  0x3  only completion for a split transaction
+  Tag  0x3
+  Length  0x002  2 bytes
+  Data  2 bytes  AA 55
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x43  ok

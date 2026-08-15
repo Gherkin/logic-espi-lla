@@ -1,0 +1,86 @@
+Command
+  Opcode  0x02  PUT_NP
+  Cycle Type  0x00  Memory Read 32
+    Command Type  Non-Posted
+    Direction  either direction
+  Tag  0x0
+  Length  0x000  4096 bytes, all zeros means 4 KB
+  Address  0xFED40000
+  CRC  0x65  ok
+TAR  2 clocks
+Response
+  Response  0x01  DEFER
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xAF  ok
+---
+Command
+  Opcode  0x02  PUT_NP
+  Cycle Type  0x02  Memory Read 64
+    Command Type  Non-Posted
+    Direction  either direction
+  Tag  0x0
+  Length  0x040  64 bytes
+  Address  0x0000000100000000
+  CRC  0xFC  ok
+TAR  2 clocks
+Response
+  Response  0x01  DEFER
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xAF  ok
+---
+Command
+  Opcode  0x02  PUT_NP
+  Cycle Type  0x00  Memory Read 32
+    Command Type  Non-Posted
+    Direction  either direction
+  Tag  0x3
+  Length  0x004  4 bytes
+  Address  0xFED40000
+  CRC  0x4F  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Cycle Type  0x0F  Successful Completion With Data
+    Command Type  Completion
+    Direction  either direction
+    Split Completion  0x3  only completion for a split transaction
+  Tag  0x3
+  Length  0x004  4 bytes
+  Data  4 bytes  11 22 33 44
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xA1  ok
+---
+Command
+  Opcode  0x02  PUT_NP
+  Cycle Type  0x02  Memory Read 64
+    Command Type  Non-Posted
+    Direction  either direction
+  Tag  0x0
+  Length  0x040  64 bytes
+  Address  0x00000000FED40000  below 4 GB, which must use the 32 bit addressing format [!]
+  CRC  0xDD  ok
+TAR  2 clocks
+Response
+  Response  0x01  DEFER
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xAF  ok

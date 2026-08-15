@@ -1,0 +1,46 @@
+Command
+  Opcode  0x00  PUT_PC
+  Cycle Type  0x10  Message
+    Command Type  Posted
+    Direction  either direction
+    Routing  0x0  Local -- terminated at receiver
+  Tag  0x0
+  Length  0x000  Reserved for this cycle type, sent as all 0s
+  Message Code  0x01  LTR, Latency Tolerance Reporting
+    Requirement  bit 7 = 1  latency fields below are valid
+    Latency Scale  0x2  1,024 ns
+    Latency Value  0x12C  307200 ns
+  CRC  0x7B  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok
+---
+Command
+  Opcode  0x00  PUT_PC
+  Cycle Type  0x10  Message
+    Command Type  Posted
+    Direction  either direction
+    Routing  0x0  Local -- terminated at receiver
+  Tag  0x0
+  Length  0x000  Reserved for this cycle type, sent as all 0s
+  Message Code  0x01  LTR, Latency Tolerance Reporting
+    Requirement  bit 7 = 0  target has no service requirement
+    Masked  Latency Scale, Latency Value  requirement bit clear, fields not valid
+  CRC  0x55  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok

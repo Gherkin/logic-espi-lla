@@ -8,10 +8,9 @@
 CMD 0C 00
 
 # 2. A defined opcode whose packet shape has not been transcribed yet.
-#    PUT_PC is real (Table 2, p.25) but its header needs the cycle-type
-#    layouts, which are stage D. The decoder must say so rather than guess a
-#    length.
-CMD 00 00
+#    PUT_OOB is real (Table 2, p.26) but its packet is Figure 45, which is
+#    stage E. The decoder must say so rather than guess a length.
+CMD 06 00
 
 # 3. A good GET_CONFIGURATION command with one bit flipped in the CRC byte.
 #    C9h where the capture has C8h.
@@ -44,3 +43,21 @@ RSP 08 00 00 00 00 0F 01 2E
 CMD 21 00 50 9F
 TAR
 RSP 08 00 00 00 00 0F 01 2E
+
+# 8. A cycle type that is real -- on another channel. 21h is the OOB
+#    (Tunneled SMBus) Message in Table 5, p.48, and the peripheral channel
+#    defines nothing at that encoding. Table 5 note 3, p.49: "The combination
+#    of command opcode and cycle type encoding must be unique. There is no
+#    requirement that cycle type encodings must be unique across command
+#    opcodes."
+#
+#    So a decoder that looks a cycle type up by its byte alone finds a
+#    plausible name here and reports an SMBus message inside a peripheral
+#    packet. The lookup has to be keyed by the channel the opcode came from,
+#    and the error has to name which channel was consulted.
+CMD 00 21 00
+
+# 9. C1C0 = 10b, the encoding Table 2 note 1 reserves. The short cycle's data
+#    length lives nowhere else, so the packet length is genuinely unknown --
+#    42h is PUT_IORD_SHORT with a request length that does not exist.
+CMD 42 00 20 00

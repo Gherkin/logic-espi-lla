@@ -213,6 +213,284 @@
     },
 
     {
+      "label": "shape: PUT_PC payload moved to the response phase",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "X( PUT_PC, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )",
+      "replace": "X( PUT_PC, ESPI_CMD( CycleHeader ), ESPI_RSP( Payload, Status16 ) )",
+      "tests": "test_link"
+    },
+    {
+      "label": "shape: GET_PC response loses its completion header",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "X( GET_PC, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )",
+      "replace": "X( GET_PC, ESPI_CMD(), ESPI_RSP( Status16 ) )",
+      "tests": "test_link"
+    },
+    {
+      "label": "shape: PUT_NP answered with no completion at all",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "X( PUT_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( CycleHeader, Payload, Status16 ) )",
+      "replace": "X( PUT_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )",
+      "tests": "test_link"
+    },
+    {
+      "label": "shape: short read data moved to the command phase",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "X( PUT_IORD_SHORT, ESPI_CMD( IoAddr16 ), ESPI_RSP( ShortData, Status16 ) )",
+      "replace": "X( PUT_IORD_SHORT, ESPI_CMD( IoAddr16, ShortData ), ESPI_RSP( Status16 ) )",
+      "tests": "test_link"
+    },
+    {
+      "label": "shape: short write data moved to the response phase",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "X( PUT_MEMWR32_SHORT, ESPI_CMD( MemAddr32, ShortData ), ESPI_RSP( Status16 ) )",
+      "replace": "X( PUT_MEMWR32_SHORT, ESPI_CMD( MemAddr32 ), ESPI_RSP( ShortData, Status16 ) )",
+      "tests": "test_link"
+    },
+
+    {
+      "label": "cycle: Memory Read 32 given the Memory Write 32 encoding",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( \"Memory Read 32\", 0x00, 0xFF, Peripheral,",
+      "replace": "X( \"Memory Read 32\", 0x01, 0xFF, Peripheral,",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: peripheral Successful Completion Without Data given both directions",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( \"Successful Completion Without Data\", 0x06, 0xFF, Peripheral, Up, Completion",
+      "replace": "X( \"Successful Completion Without Data\", 0x06, 0xFF, Peripheral, UpOrDown, Completion",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: completion mask FFh -- P1P0 read as part of the encoding",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( \"Successful Completion With Data\", 0x09, 0xF9, Peripheral,",
+      "replace": "X( \"Successful Completion With Data\", 0x09, 0xFF, Peripheral,",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: message routing mask F1h -> FFh",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( \"Message\", 0x10, 0xF1, Peripheral,",
+      "replace": "X( \"Message\", 0x10, 0xFF, Peripheral,",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: Message with Data encoding shifted off its row",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( \"Message with Data\", 0x11, 0xF1,",
+      "replace": "X( \"Message with Data\", 0x13, 0xF1,",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: Flash Read filed on the peripheral channel",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( \"Flash Read\", 0x00, 0xFF, Flash,",
+      "replace": "X( \"Flash Read\", 0x00, 0xFF, Peripheral,",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: RPMC Op.1 given both directions",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( \"RPMC Op.1\", 0x03, 0x9F, Flash, Down,",
+      "replace": "X( \"RPMC Op.1\", 0x03, 0x9F, Flash, UpOrDown,",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: RPMC mask 9Fh -> FFh (R1R0 read as part of the encoding)",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( \"RPMC Op.2\", 0x04, 0x9F,",
+      "replace": "X( \"RPMC Op.2\", 0x04, 0xFF,",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: OOB packet layout claimed as transcribed",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( \"OOB (Tunneled SMBus) Message\", 0x21, 0xFF, Oob, UpOrDown, Posted, NotTranscribed, None )",
+      "replace": "X( \"OOB (Tunneled SMBus) Message\", 0x21, 0xFF, Oob, UpOrDown, Posted, MessageWithData, None )",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: split completion field read from bits [3:2]",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_CYCLE_SPLIT_COMPLETION_SHIFT 1u",
+      "replace": "#define ESPI_CYCLE_SPLIT_COMPLETION_SHIFT 2u",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: note 2 checks P0 rather than P1",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_CYCLE_SPLIT_P1_MASK 0x2u",
+      "replace": "#define ESPI_CYCLE_SPLIT_P1_MASK 0x1u",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: split completion 00b read as the first rather than the middle",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 0x0, \"middle completion of a split completion sequence\" )",
+      "replace": "X( 0x0, \"first completion of a split completion sequence\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: message routing field read from bit 0",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_CYCLE_MESSAGE_ROUTING_SHIFT 1u",
+      "replace": "#define ESPI_CYCLE_MESSAGE_ROUTING_SHIFT 0u",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: routing field two bits rather than three",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_CYCLE_MESSAGE_ROUTING_MASK 0x7u",
+      "replace": "#define ESPI_CYCLE_MESSAGE_ROUTING_MASK 0x3u",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: RPMC target field read from bits [7:6]",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_CYCLE_RPMC_TARGET_SHIFT 5u",
+      "replace": "#define ESPI_CYCLE_RPMC_TARGET_SHIFT 6u",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: RPMC 00b decoded as the 2nd flash device",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 0x0, \"1st RPMC flash device\" )",
+      "replace": "X( 0x0, \"2nd RPMC flash device\" )",
+      "tests": "test_link"
+    },
+
+    {
+      "label": "length: all zeros read as zero rather than 4 KB",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_CYCLE_LENGTH_ZERO_MEANS 4096u",
+      "replace": "#define ESPI_CYCLE_LENGTH_ZERO_MEANS 0u",
+      "tests": "test_link"
+    },
+    {
+      "label": "length: Tag leaks into Length[11:8]",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_CYCLE_LENGTH_HIGH_MASK 0xFu",
+      "replace": "#define ESPI_CYCLE_LENGTH_HIGH_MASK 0xFFu",
+      "tests": "test_link"
+    },
+    {
+      "label": "length: Tag read from bits [6:3]",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_CYCLE_TAG_SHIFT 4u",
+      "replace": "#define ESPI_CYCLE_TAG_SHIFT 3u",
+      "tests": "test_link"
+    },
+
+    {
+      "label": "layout: Memory Read 64 given the 32-bit header",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( MemoryRead64, \"Figure 36, p.54\", 11, 8, false, false, OneBased )",
+      "replace": "X( MemoryRead64, \"Figure 36, p.54\", 7, 4, false, false, OneBased )",
+      "tests": "test_link"
+    },
+    {
+      "label": "layout: Memory Write 32 loses its payload",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( MemoryWrite32, \"Figure 34, p.53\", 7, 4, false, true, OneBased )",
+      "replace": "X( MemoryWrite32, \"Figure 34, p.53\", 7, 4, false, false, OneBased )",
+      "tests": "test_link"
+    },
+    {
+      "label": "layout: Message Length treated as an ordinary byte count",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( Message, \"Figure 38, p.54\", 8, 0, true, false, Reserved )",
+      "replace": "X( Message, \"Figure 38, p.54\", 8, 0, true, false, OneBased )",
+      "tests": "test_link"
+    },
+    {
+      "label": "layout: message header loses its 4 message specific bytes",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( MessageWithData, \"Figure 38, p.54\", 8, 0, true, true, OneBased )",
+      "replace": "X( MessageWithData, \"Figure 38, p.54\", 3, 0, false, true, OneBased )",
+      "tests": "test_link"
+    },
+    {
+      "label": "layout: Completion Without Data Length read as a byte count",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( CompletionWithoutData, \"Figure 39, p.55\", 3, 0, false, false, MustBeZero )",
+      "replace": "X( CompletionWithoutData, \"Figure 39, p.55\", 3, 0, false, false, OneBased )",
+      "tests": "test_link"
+    },
+    {
+      "label": "short: I/O address read as 4 bytes",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_CYCLE_SHORT_IO_ADDRESS_BYTES 2u",
+      "replace": "#define ESPI_CYCLE_SHORT_IO_ADDRESS_BYTES 4u",
+      "tests": "test_link"
+    },
+    {
+      "label": "short: memory address read as 2 bytes",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_CYCLE_SHORT_MEMORY_ADDRESS_BYTES 4u",
+      "replace": "#define ESPI_CYCLE_SHORT_MEMORY_ADDRESS_BYTES 2u",
+      "tests": "test_link"
+    },
+
+    {
+      "label": "ltr: Requirement bit read from bit 6",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_LTR_RQ_BIT 7u",
+      "replace": "#define ESPI_LTR_RQ_BIT 6u",
+      "tests": "test_link"
+    },
+    {
+      "label": "ltr: Latency Scale read from bits [5:3]",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_LTR_SCALE_SHIFT 2u",
+      "replace": "#define ESPI_LTR_SCALE_SHIFT 3u",
+      "tests": "test_link"
+    },
+    {
+      "label": "ltr: Latency Value high bits widened past [1:0]",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_LTR_VALUE_HIGH_MASK 0x3u",
+      "replace": "#define ESPI_LTR_VALUE_HIGH_MASK 0x7u",
+      "tests": "test_link"
+    },
+    {
+      "label": "ltr: scale 010b multiplier 1,024 -> 1,000 ns",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 0x2, 1024u, \"1,024 ns\" )",
+      "replace": "X( 0x2, 1000u, \"1,000 ns\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "ltr: Reserved scale encoding given a multiplier",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 0x5, 33554432u, \"33,554,432 ns\" )",
+      "replace": "X( 0x6, 33554432u, \"33,554,432 ns\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "message: LTR code 01h -> 02h",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 0x01, \"LTR\", \"Message\", 0x0, Up, true,",
+      "replace": "X( 0x02, \"LTR\", \"Message\", 0x0, Up, true,",
+      "tests": "test_link"
+    },
+    {
+      "label": "message: LTR fields reported as not transcribed",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 0x01, \"LTR\", \"Message\", 0x0, Up, true,",
+      "replace": "X( 0x01, \"LTR\", \"Message\", 0x0, Up, false,",
+      "tests": "test_link"
+    },
+    {
+      "label": "message: LTR routing 000b -> 001b",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 0x01, \"LTR\", \"Message\", 0x0, Up, true,",
+      "replace": "X( 0x01, \"LTR\", \"Message\", 0x1, Up, true,",
+      "tests": "test_link"
+    },
+
+    {
       "label": "config: Channel 1 register moved off offset 020h",
       "file": "src/core/tables/ConfigRegisters.h",
       "find": "X( 0x020, 0x023, \"Channel 1 Capabilities and Configurations\", Fields )",

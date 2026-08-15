@@ -13,6 +13,7 @@
 // typed from the rendered spec pages, not lifted from the headers they check.
 
 #include "espi/ConfigRegisters.h"
+#include "espi/CycleTypes.h"
 #include "espi/Decode.h"
 #include "espi/LinkDecoder.h"
 #include "espi/PacketShape.h"
@@ -178,6 +179,29 @@ void TestVwirePackets()
     CheckAgainstExpected( "vwire_malformed.espi", "vwire_malformed.expected", true );
 }
 
+// The peripheral channel. Every fixture here is hand built: espi_dump.txt is a
+// link coming up and carries no peripheral traffic at all, so none of this has
+// capture evidence behind it.
+void TestPeripheralPackets()
+{
+    CheckAgainstExpected( "put_pc_memory_write32.espi", "put_pc_memory_write32.expected", true );
+    CheckAgainstExpected( "get_pc_completion.espi", "get_pc_completion.expected", true );
+
+    // A Length of all zeros, DEFER carrying no completion, and the 11-byte
+    // 64-bit header -- see the fixture's own header for why each matters.
+    CheckAgainstExpected( "put_np_memory_read.espi", "put_np_memory_read.expected", true );
+
+    // The whole P1P0 field, including the encoding note 2 forbids.
+    CheckAgainstExpected( "completion_split.espi", "completion_split.expected", true );
+
+    // The Message cycle type, its Reserved Length, and Table 6's one code.
+    CheckAgainstExpected( "put_pc_ltr_message.espi", "put_pc_ltr_message.expected", true );
+
+    // The short cycles, whose length lives in the opcode rather than the
+    // packet, and whose read responses carry no completion header.
+    CheckAgainstExpected( "short_cycles.espi", "short_cycles.expected", true );
+}
+
 void TestWaitState()
 {
     // The response CRC in this fixture covers 08 0F 01 only. If either 0Fh
@@ -241,17 +265,18 @@ void TestFramingInvariant()
 }
 
 // An opcode with no transcribed shape must not resolve. This is what keeps a
-// gap a gap instead of a guess.
+// gap a gap instead of a guess, and the list shrinking is the progress marker:
+// stage D took the eight peripheral opcodes off it, leaving OOB, flash and
+// RESET for stage E.
 void TestUntranscribedShapesAreGaps()
 {
     const uint8_t no_shape[] = {
-        0x00, // PUT_PC        -- needs cycle-type headers
-        0x01, // GET_PC
-        0x02, // PUT_NP
-        0x03, // GET_NP
-        0x06, // PUT_OOB
-        0x08, // PUT_FLASH_C
-        0x40, // PUT_IORD_SHORT
+        0x06, // PUT_OOB       -- needs Figure 45
+        0x07, // GET_OOB
+        0x08, // PUT_FLASH_C   -- needs Figures 48 and 50
+        0x09, // GET_FLASH_NP
+        0x0A, // PUT_FLASH_NP
+        0x0B, // GET_FLASH_C
         0xFF, // RESET
     };
     for( uint8_t opcode : no_shape )
@@ -259,6 +284,35 @@ void TestUntranscribedShapesAreGaps()
         if( LookupShape( opcode, nullptr ) )
             std::fprintf( stderr, "FAIL  opcode 0x%02X resolved to a shape that was never transcribed\n", opcode );
         TEST_CHECK( !LookupShape( opcode, nullptr ) );
+    }
+
+    // The eight peripheral opcodes do resolve now. Asserting that here as well
+    // keeps the two halves of this test in one place: a shape quietly dropped
+    // from the table would otherwise just shorten the list above.
+    const uint8_t has_shape[] = {
+        0x00, 0x01, 0x02, 0x03, // PUT_PC, GET_PC, PUT_NP, GET_NP
+        0x40, 0x44, 0x48, 0x4C, // the four short cycles at C1C0 = 00b
+    };
+    for( uint8_t opcode : has_shape )
+    {
+        if( !LookupShape( opcode, nullptr ) )
+            std::fprintf( stderr, "FAIL  opcode 0x%02X has no shape\n", opcode );
+        TEST_CHECK( LookupShape( opcode, nullptr ) );
+    }
+
+    // A short cycle is one shape across all four C1C0 encodings -- Table 2
+    // gives them mask FCh. Matching only the base encoding would leave 41h,
+    // 42h and 43h reporting as undecodable opcodes, which is what an exact
+    // match did before stage D.
+    for( uint8_t base : { uint8_t( 0x40 ), uint8_t( 0x44 ), uint8_t( 0x48 ), uint8_t( 0x4C ) } )
+    {
+        for( uint8_t c1c0 = 0; c1c0 < 4; ++c1c0 )
+        {
+            const uint8_t opcode = static_cast<uint8_t>( base + c1c0 );
+            if( !LookupShape( opcode, nullptr ) )
+                std::fprintf( stderr, "FAIL  short opcode 0x%02X has no shape\n", opcode );
+            TEST_CHECK( LookupShape( opcode, nullptr ) );
+        }
     }
 }
 
@@ -929,6 +983,487 @@ void TestVwireDataFormats()
     }
 }
 
+// --- cycle types, Table 5 pp.47-49 ----------------------------------------
+
+// Every row of Table 5, typed from the rendered pages in the order they are
+// printed. The encodings are the reason this table is read off images: three
+// of them carry a subscripted variable field pressed against a superscript
+// footnote marker, and extraction turns both into ordinary digits.
+void TestCycleTypeEncodings()
+{
+    struct Expect
+    {
+        const char* name;
+        uint8_t encoding;
+        uint8_t mask;
+        ChannelId channel;
+        CycleDirection direction;
+        CycleCommandType command_type;
+    };
+    const CycleDirection kUp = CycleDirection::Up;
+    const CycleDirection kDown = CycleDirection::Down;
+    const CycleDirection kBoth = CycleDirection::UpOrDown;
+    const CycleCommandType kPosted = CycleCommandType::Posted;
+    const CycleCommandType kNonPosted = CycleCommandType::NonPosted;
+    const CycleCommandType kCompletion = CycleCommandType::Completion;
+    const ChannelId kPeripheral = ChannelId::Peripheral;
+    const ChannelId kOob = ChannelId::Oob;
+    const ChannelId kFlash = ChannelId::Flash;
+
+    const Expect table[] = {
+        // eSPI Peripheral Channel, p.47
+        { "Memory Read 32", 0x00, 0xFF, kPeripheral, kBoth, kNonPosted },
+        { "Memory Write 32", 0x01, 0xFF, kPeripheral, kBoth, kPosted },
+        { "Memory Read 64", 0x02, 0xFF, kPeripheral, kBoth, kNonPosted },
+        { "Memory Write 64", 0x03, 0xFF, kPeripheral, kBoth, kPosted },
+        // "Up", not "Up/Down". Its flash-channel namesake on p.48 is Up/Down.
+        { "Successful Completion Without Data", 0x06, 0xFF, kPeripheral, kUp, kCompletion },
+        // p.48. 00001P1P0 with the footnote markers stripped: the variable
+        // field is bits [2:1] and bit 0 is a real bit, so the mask is F9h.
+        { "Unsuccessful Completion Without Data", 0x08, 0xF9, kPeripheral, kBoth, kCompletion },
+        { "Successful Completion With Data", 0x09, 0xF9, kPeripheral, kBoth, kCompletion },
+        // 0001r2r1r0 with the routing field at bits [3:1], so the mask is F1h.
+        { "Message", 0x10, 0xF1, kPeripheral, kBoth, kPosted },
+        { "Message with Data", 0x11, 0xF1, kPeripheral, kBoth, kPosted },
+        // OOB Message Channel, p.48
+        { "OOB (Tunneled SMBus) Message", 0x21, 0xFF, kOob, kBoth, kPosted },
+        // Flash Access Channel, pp.48-49
+        { "Flash Read", 0x00, 0xFF, kFlash, kBoth, kNonPosted },
+        { "Flash Write", 0x01, 0xFF, kFlash, kBoth, kNonPosted },
+        { "Flash Erase", 0x02, 0xFF, kFlash, kBoth, kNonPosted },
+        // 0R1R0 00011 -- the field is bits [6:5], so the mask is 9Fh, and the
+        // raised 6 between R0 and the last five bits is a footnote marker.
+        // Both RPMC rows are Down only.
+        { "RPMC Op.1", 0x03, 0x9F, kFlash, kDown, kNonPosted },
+        { "RPMC Op.2", 0x04, 0x9F, kFlash, kDown, kNonPosted },
+        { "Successful Completion Without Data", 0x06, 0xFF, kFlash, kBoth, kCompletion },
+        { "Unsuccessful Completion Without Data", 0x08, 0xF9, kFlash, kBoth, kCompletion },
+        { "Successful Completion With Data", 0x09, 0xF9, kFlash, kBoth, kCompletion },
+    };
+
+    const size_t rows = sizeof( table ) / sizeof( table[ 0 ] );
+    if( CycleTypeCount() != rows )
+        std::fprintf( stderr, "FAIL  table has %zu rows, expected %zu\n", CycleTypeCount(), rows );
+    TEST_CHECK_EQ( CycleTypeCount(), rows );
+
+    for( size_t i = 0; i < rows && i < CycleTypeCount(); ++i )
+    {
+        const CycleTypeInfo& got = CycleTypeAt( i );
+        const Expect& want = table[ i ];
+
+        if( std::string( got.name ) != want.name || got.encoding != want.encoding || got.mask != want.mask )
+        {
+            std::fprintf( stderr, "FAIL  row %zu: expected %s %02X/%02X, got %s %02X/%02X\n", i, want.name, want.encoding,
+                          want.mask, got.name, got.encoding, got.mask );
+            TEST_CHECK( false );
+            continue;
+        }
+        TEST_CHECK( got.channel == want.channel );
+        TEST_CHECK( got.direction == want.direction );
+        TEST_CHECK( got.command_type == want.command_type );
+
+        // A row's encoding must be reachable through the lookup it belongs to.
+        // Without this a row shadowed by an earlier one would sit in the table
+        // looking correct and never decode anything.
+        CycleTypeInfo found;
+        if( !LookupCycleType( want.channel, want.encoding, &found ) )
+        {
+            std::fprintf( stderr, "FAIL  %s does not resolve at %02X\n", want.name, want.encoding );
+            TEST_CHECK( false );
+            continue;
+        }
+        TEST_CHECK( std::string( found.name ) == want.name );
+    }
+}
+
+// Table 5 note 3, p.49: "The combination of command opcode and cycle type
+// encoding must be unique. There is no requirement that cycle type encodings
+// must be unique across command opcodes."
+//
+// The table uses that freedom on four encodings, so a lookup keyed by the byte
+// alone reports flash traffic as memory traffic and vice versa. Nothing in a
+// decode looks wrong when it does.
+void TestCycleTypesAreChannelKeyed()
+{
+    struct Collision
+    {
+        uint8_t encoding;
+        const char* peripheral;
+        const char* flash;
+    };
+    const Collision table[] = {
+        { 0x00, "Memory Read 32", "Flash Read" },
+        { 0x01, "Memory Write 32", "Flash Write" },
+        { 0x02, "Memory Read 64", "Flash Erase" },
+    };
+
+    for( const Collision& c : table )
+    {
+        CycleTypeInfo peripheral;
+        CycleTypeInfo flash;
+        TEST_CHECK( LookupCycleType( ChannelId::Peripheral, c.encoding, &peripheral ) );
+        TEST_CHECK( LookupCycleType( ChannelId::Flash, c.encoding, &flash ) );
+        if( std::string( peripheral.name ) != c.peripheral || std::string( flash.name ) != c.flash )
+            std::fprintf( stderr, "FAIL  %02X: expected %s / %s, got %s / %s\n", c.encoding, c.peripheral, c.flash,
+                          peripheral.name, flash.name );
+        TEST_CHECK( std::string( peripheral.name ) == c.peripheral );
+        TEST_CHECK( std::string( flash.name ) == c.flash );
+    }
+
+    // 21h is the OOB message. On the peripheral channel it is nothing at all,
+    // and a decoder must say so rather than borrow the OOB row's name.
+    TEST_CHECK( LookupCycleType( ChannelId::Oob, 0x21, nullptr ) );
+    TEST_CHECK( !LookupCycleType( ChannelId::Peripheral, 0x21, nullptr ) );
+    TEST_CHECK( !LookupCycleType( ChannelId::Flash, 0x21, nullptr ) );
+
+    // The virtual wire channel has no cycle types: its packet is an index and
+    // a data byte, not a cycle-type header. Neither does a channel-independent
+    // command. Table 5's Channel Type column lists exactly three channels.
+    TEST_CHECK( !LookupCycleType( ChannelId::VirtualWire, 0x00, nullptr ) );
+    TEST_CHECK( !LookupCycleType( ChannelId::ChannelIndependent, 0x00, nullptr ) );
+
+    // Every peripheral encoding a packet could carry must resolve to exactly
+    // one row, or not at all. An overlapping pair of masks would make the
+    // decode depend on table order rather than on the page.
+    for( unsigned byte = 0; byte <= 0xFF; ++byte )
+    {
+        size_t matches = 0;
+        for( size_t i = 0; i < CycleTypeCount(); ++i )
+        {
+            const CycleTypeInfo& row = CycleTypeAt( i );
+            if( row.channel == ChannelId::Peripheral && ( ( byte & row.mask ) == row.encoding ) )
+                ++matches;
+        }
+        if( matches > 1 )
+            std::fprintf( stderr, "FAIL  peripheral byte %02X matches %zu rows\n", byte, matches );
+        TEST_CHECK( matches <= 1 );
+    }
+}
+
+// Section 4.1.1, p.46: "The Least-Significant-Bit (LSB) of the encodings
+// distinguishes between a cycle with data and a cycle without data."
+//
+// The rows name themselves, so this is a check of the encodings against the
+// page's own rule -- an off-by-one in the completion encodings, which is the
+// exact failure the footnote markers invite, shows up here as a With Data row
+// with an even encoding.
+void TestCycleTypeLsbRule()
+{
+    size_t checked = 0;
+    for( size_t i = 0; i < CycleTypeCount(); ++i )
+    {
+        const CycleTypeInfo& row = CycleTypeAt( i );
+        const std::string name = row.name;
+        const bool says_with_data = name.find( "Without Data" ) == std::string::npos
+                                    && ( name.find( "With Data" ) != std::string::npos
+                                         || name.find( "with Data" ) != std::string::npos );
+        const bool says_without_data = name.find( "Without Data" ) != std::string::npos;
+        if( !says_with_data && !says_without_data )
+            continue;
+
+        ++checked;
+        const bool lsb = ( row.encoding & 1u ) != 0;
+        if( lsb != says_with_data )
+            std::fprintf( stderr, "FAIL  %s has encoding %02X, whose LSB contradicts its name\n", row.name, row.encoding );
+        TEST_CHECK_EQ( lsb, says_with_data );
+    }
+
+    // Seven rows name themselves this way: four on the peripheral channel and
+    // three on the flash channel. Without the count a rename that stopped
+    // matching would silently check nothing.
+    TEST_CHECK_EQ( checked, size_t( 7 ) );
+
+    // The same rule again, against the layout table rather than the row names.
+    // This reaches the two Message rows, whose names do not state the answer,
+    // and it is an independent check: the encodings come from Table 5 and
+    // has_payload comes from Figures 34-39, so the two agreeing is two
+    // readings of two different pages agreeing.
+    for( size_t i = 0; i < CycleTypeCount(); ++i )
+    {
+        const CycleTypeInfo& row = CycleTypeAt( i );
+        CycleHeaderLayout layout;
+        if( !LookupCycleHeaderLayout( row.layout, &layout ) )
+            continue;
+        if( layout.has_payload != ( ( row.encoding & 1u ) != 0 ) )
+            std::fprintf( stderr, "FAIL  %s: encoding %02X and its packet figure disagree about carrying data\n", row.name,
+                          row.encoding );
+        TEST_CHECK_EQ( layout.has_payload, ( row.encoding & 1u ) != 0 );
+    }
+}
+
+// Figures 34, 36, 38 and 39, pp.53-55 -- the byte counts the braces span.
+void TestCycleHeaderLayouts()
+{
+    struct Expect
+    {
+        CycleLayout layout;
+        uint8_t header_bytes;
+        uint8_t address_bytes;
+        bool has_message_code;
+        bool has_payload;
+        CycleLength length;
+    };
+    const Expect table[] = {
+        // Figure 36, p.54: Byte 0 cycle type through Byte 6 Address[7:0].
+        { CycleLayout::MemoryRead32, 7, 4, false, false, CycleLength::OneBased },
+        // Same figure, right hand side: through Byte 10.
+        { CycleLayout::MemoryRead64, 11, 8, false, false, CycleLength::OneBased },
+        // Figure 34, p.53: same headers, then Data Byte 0 at Byte 7 / Byte 11.
+        { CycleLayout::MemoryWrite32, 7, 4, false, true, CycleLength::OneBased },
+        { CycleLayout::MemoryWrite64, 11, 8, false, true, CycleLength::OneBased },
+        // Figure 38, p.54: Message Code at Byte 3 and four specific bytes.
+        { CycleLayout::Message, 8, 0, true, false, CycleLength::Reserved },
+        { CycleLayout::MessageWithData, 8, 0, true, true, CycleLength::OneBased },
+        // Figure 39, p.55: three header bytes either way.
+        { CycleLayout::CompletionWithData, 3, 0, false, true, CycleLength::OneBased },
+        { CycleLayout::CompletionWithoutData, 3, 0, false, false, CycleLength::MustBeZero },
+    };
+
+    for( const Expect& e : table )
+    {
+        CycleHeaderLayout got;
+        if( !LookupCycleHeaderLayout( e.layout, &got ) )
+        {
+            std::fprintf( stderr, "FAIL  layout %u has no entry\n", static_cast<unsigned>( e.layout ) );
+            TEST_CHECK( false );
+            continue;
+        }
+        TEST_CHECK_EQ( got.header_bytes, e.header_bytes );
+        TEST_CHECK_EQ( got.address_bytes, e.address_bytes );
+        TEST_CHECK_EQ( got.has_message_code, e.has_message_code );
+        TEST_CHECK_EQ( got.has_payload, e.has_payload );
+        TEST_CHECK( got.length == e.length );
+
+        // Every header opens with cycle type, Tag/Length[11:8] and Length[7:0]
+        // -- Figure 33, p.46 -- and then differs. The transcribed total and
+        // that rule are two readings of the same brace, so they have to agree.
+        const uint8_t derived = static_cast<uint8_t>( 3 + got.address_bytes + ( got.has_message_code ? 5 : 0 ) );
+        if( derived != got.header_bytes )
+            std::fprintf( stderr, "FAIL  layout %u: brace says %u bytes, fields add to %u\n", static_cast<unsigned>( e.layout ),
+                          got.header_bytes, derived );
+        TEST_CHECK_EQ( derived, got.header_bytes );
+    }
+
+    // The OOB and flash rows point at figures nobody has read yet. That is a
+    // gap in the transcription, and it must not resolve to some other row's
+    // layout however plausible the packet would look.
+    TEST_CHECK( !LookupCycleHeaderLayout( CycleLayout::NotTranscribed, nullptr ) );
+    for( size_t i = 0; i < CycleTypeCount(); ++i )
+    {
+        const CycleTypeInfo& row = CycleTypeAt( i );
+        const bool transcribed = row.channel == ChannelId::Peripheral;
+        if( ( row.layout != CycleLayout::NotTranscribed ) != transcribed )
+            std::fprintf( stderr, "FAIL  %s on channel %s has the wrong transcription state\n", row.name,
+                          ChannelName( row.channel ) );
+        TEST_CHECK_EQ( row.layout != CycleLayout::NotTranscribed, transcribed );
+    }
+}
+
+// Section 4.1.3, pp.50-51 -- how to read the Length field. None of this is in
+// Table 5 or in any figure.
+void TestCycleLengthRules()
+{
+    // "The length field is 1-based. A value of all zeros indicates 4 KB of
+    // length." The 4 KB reading is the one a decoder written from the packet
+    // figures alone gets wrong, and it is the most common case on the bus.
+    TEST_CHECK_EQ( CycleResolvedLength( 0x000 ), 4096u );
+    TEST_CHECK_EQ( CycleResolvedLength( 0x001 ), 1u );
+    TEST_CHECK_EQ( CycleResolvedLength( 0x040 ), 64u );
+    TEST_CHECK_EQ( CycleResolvedLength( 0xFFF ), 4095u );
+    TEST_CHECK_EQ( CycleLengthBits(), 12u );
+
+    // Figure 33, p.46: byte 1 is Tag over Length[11:8], byte 2 is Length[7:0].
+    TEST_CHECK_EQ( CycleTagOf( 0x30 ), uint8_t( 0x3 ) );
+    TEST_CHECK_EQ( CycleTagOf( 0xFF ), uint8_t( 0xF ) );
+    TEST_CHECK_EQ( CycleLengthOf( 0x30, 0x04 ), uint16_t( 0x004 ) );
+    TEST_CHECK_EQ( CycleLengthOf( 0x3F, 0xFF ), uint16_t( 0xFFF ) );
+    // The tag must not leak into the length, and vice versa.
+    TEST_CHECK_EQ( CycleLengthOf( 0xF0, 0x00 ), uint16_t( 0x000 ) );
+    TEST_CHECK_EQ( CycleTagOf( 0x0F ), uint8_t( 0x0 ) );
+
+    // Figures 35 and 37, pp.53-54. Section 4.1.3 again: "For Short I/O and
+    // Short Memory, there is no length field defined as the length of the
+    // transaction is embedded in the command opcode itself."
+    TEST_CHECK_EQ( CycleShortIoAddressBytes(), 2u );
+    TEST_CHECK_EQ( CycleShortMemoryAddressBytes(), 4u );
+}
+
+// Table 5 notes 1, 2, 5 and 6, p.49.
+void TestCycleVariableFields()
+{
+    // Note 1. The order is not the one a reader expects -- 00b is the middle
+    // completion, not the first -- so it is checked value by value.
+    TEST_CHECK( std::string( SplitCompletionText( 0x0 ) ).find( "middle" ) != std::string::npos );
+    TEST_CHECK( std::string( SplitCompletionText( 0x1 ) ).find( "first" ) != std::string::npos );
+    TEST_CHECK( std::string( SplitCompletionText( 0x2 ) ).find( "last" ) != std::string::npos );
+    TEST_CHECK( std::string( SplitCompletionText( 0x3 ) ).find( "only" ) != std::string::npos );
+
+    // The field sits at bits [2:1] of the completion encodings, so extracting
+    // it from the byte has to shift as well as mask.
+    CycleTypeInfo completion;
+    TEST_CHECK( LookupCycleType( ChannelId::Peripheral, 0x0F, &completion ) );
+    TEST_CHECK( completion.variable == CycleVariable::SplitCompletion );
+    TEST_CHECK_EQ( CycleVariableValue( completion, 0x09 ), uint8_t( 0x0 ) );
+    TEST_CHECK_EQ( CycleVariableValue( completion, 0x0B ), uint8_t( 0x1 ) );
+    TEST_CHECK_EQ( CycleVariableValue( completion, 0x0D ), uint8_t( 0x2 ) );
+    TEST_CHECK_EQ( CycleVariableValue( completion, 0x0F ), uint8_t( 0x3 ) );
+
+    // Note 2: "For Unsuccessful Completion without Data, P1 must be always a
+    // '1' as this is always the last or the only completion." P1 is the high
+    // bit of the field, so 00b and 01b are the forbidden pair.
+    CycleTypeInfo unsuccessful;
+    TEST_CHECK( LookupCycleType( ChannelId::Peripheral, 0x08, &unsuccessful ) );
+    TEST_CHECK( std::string( unsuccessful.name ) == "Unsuccessful Completion Without Data" );
+    TEST_CHECK( SplitCompletionViolatesNote2( unsuccessful, 0x08 ) );  // P1P0 = 00b
+    TEST_CHECK( SplitCompletionViolatesNote2( unsuccessful, 0x0A ) );  // P1P0 = 01b
+    TEST_CHECK( !SplitCompletionViolatesNote2( unsuccessful, 0x0C ) ); // 10b, last
+    TEST_CHECK( !SplitCompletionViolatesNote2( unsuccessful, 0x0E ) ); // 11b, only
+    // The note is about the unsuccessful row only. A successful completion
+    // with data is free to be a first or middle completion, and flagging one
+    // would turn ordinary split traffic into a wall of errors.
+    TEST_CHECK( !SplitCompletionViolatesNote2( completion, 0x09 ) );
+    TEST_CHECK( !SplitCompletionViolatesNote2( completion, 0x0B ) );
+
+    // Nothing else in the whole table may be flagged, whatever byte it is
+    // handed. The row is picked out by two conditions rather than by its name,
+    // so this sweep is what pins that the pair really is unique -- a stage E
+    // row that acquired a completion layout must not start being policed by a
+    // note that was never about it.
+    size_t flagged_rows = 0;
+    for( size_t i = 0; i < CycleTypeCount(); ++i )
+    {
+        const CycleTypeInfo& row = CycleTypeAt( i );
+        bool flagged = false;
+        for( unsigned byte = 0; byte <= 0xFF; ++byte )
+        {
+            if( ( byte & row.mask ) != row.encoding )
+                continue;
+            if( SplitCompletionViolatesNote2( row, static_cast<uint8_t>( byte ) ) )
+                flagged = true;
+        }
+        if( flagged )
+        {
+            ++flagged_rows;
+            if( std::string( row.name ) != "Unsuccessful Completion Without Data" )
+                std::fprintf( stderr, "FAIL  note 2 flags %s, which it is not about\n", row.name );
+            TEST_CHECK( std::string( row.name ) == "Unsuccessful Completion Without Data" );
+        }
+    }
+    // Only the peripheral one, so far: the flash row's layout is not
+    // transcribed yet, and stage E will bring it into scope.
+    TEST_CHECK_EQ( flagged_rows, size_t( 1 ) );
+
+    // Note 5. Only 000b is defined; 001b-111b is one Reserved row.
+    TEST_CHECK( MessageRoutingText( 0x0 ) != nullptr );
+    for( uint8_t r = 1; r < 8; ++r )
+        TEST_CHECK( MessageRoutingText( r ) == nullptr );
+
+    CycleTypeInfo message;
+    TEST_CHECK( LookupCycleType( ChannelId::Peripheral, 0x10, &message ) );
+    TEST_CHECK( message.variable == CycleVariable::MessageRouting );
+    // The routing field is bits [3:1], so it spans the byte differently from
+    // the completion field even though both start at bit 1.
+    TEST_CHECK_EQ( CycleVariableValue( message, 0x10 ), uint8_t( 0x0 ) );
+    TEST_CHECK_EQ( CycleVariableValue( message, 0x12 ), uint8_t( 0x1 ) );
+    TEST_CHECK_EQ( CycleVariableValue( message, 0x1E ), uint8_t( 0x7 ) );
+
+    // Note 6. The page heads this note's own table "P1P0" while the note text
+    // and the field in the encoding both say R1R0 -- a typo in the
+    // specification, not two fields.
+    TEST_CHECK( std::string( RpmcTargetText( 0x0 ) ).find( "1st" ) != std::string::npos );
+    TEST_CHECK( std::string( RpmcTargetText( 0x3 ) ).find( "4th" ) != std::string::npos );
+
+    CycleTypeInfo rpmc;
+    TEST_CHECK( LookupCycleType( ChannelId::Flash, 0x03, &rpmc ) );
+    TEST_CHECK( std::string( rpmc.name ) == "RPMC Op.1" );
+    TEST_CHECK( rpmc.variable == CycleVariable::RpmcTarget );
+    // Bits [6:5], which is why RPMC Op.1 spans 03h, 23h, 43h and 63h.
+    TEST_CHECK_EQ( CycleVariableValue( rpmc, 0x03 ), uint8_t( 0x0 ) );
+    TEST_CHECK_EQ( CycleVariableValue( rpmc, 0x23 ), uint8_t( 0x1 ) );
+    TEST_CHECK_EQ( CycleVariableValue( rpmc, 0x43 ), uint8_t( 0x2 ) );
+    TEST_CHECK_EQ( CycleVariableValue( rpmc, 0x63 ), uint8_t( 0x3 ) );
+    TEST_CHECK( LookupCycleType( ChannelId::Flash, 0x63, &rpmc ) );
+    TEST_CHECK( std::string( rpmc.name ) == "RPMC Op.1" );
+
+    // A row with no variable field must not have one extracted from it.
+    CycleTypeInfo write32;
+    TEST_CHECK( LookupCycleType( ChannelId::Peripheral, 0x01, &write32 ) );
+    TEST_CHECK( write32.variable == CycleVariable::None );
+    TEST_CHECK_EQ( CycleVariableValue( write32, 0x01 ), uint8_t( 0 ) );
+}
+
+// Table 6 p.55, Figure 40 p.56 and Table 7 p.57 -- the LTR message.
+void TestMessageCodesAndLtr()
+{
+    MessageCodeInfo ltr;
+    TEST_CHECK( LookupMessageCode( 0x01, &ltr ) );
+    TEST_CHECK( std::string( ltr.name ) == "LTR" );
+    TEST_CHECK_EQ( ltr.routing, uint8_t( 0x0 ) );
+    TEST_CHECK( ltr.direction == CycleDirection::Up );
+    TEST_CHECK( ltr.fields_transcribed );
+
+    // Table 6 has exactly one row, so every other code is a message this
+    // document does not name.
+    TEST_CHECK( !LookupMessageCode( 0x00, nullptr ) );
+    TEST_CHECK( !LookupMessageCode( 0x02, nullptr ) );
+    TEST_CHECK( !LookupMessageCode( 0xFF, nullptr ) );
+
+    // Table 7's Latency Scale column, all six defined encodings.
+    struct Scale
+    {
+        uint8_t encoding;
+        uint32_t nanoseconds;
+    };
+    const Scale scales[] = {
+        { 0x0, 1u }, { 0x1, 32u }, { 0x2, 1024u }, { 0x3, 32768u }, { 0x4, 1048576u }, { 0x5, 33554432u },
+    };
+    for( const Scale& s : scales )
+    {
+        uint32_t ns = 0;
+        if( !LtrScaleNanoseconds( s.encoding, &ns ) )
+        {
+            std::fprintf( stderr, "FAIL  latency scale %u has no multiplier\n", s.encoding );
+            TEST_CHECK( false );
+            continue;
+        }
+        TEST_CHECK_EQ( ns, s.nanoseconds );
+        TEST_CHECK( LtrScaleText( s.encoding ) != nullptr );
+    }
+    // 110b and 111b are one Reserved row. A multiplier of zero would render
+    // every latency as 0 ns, which reads as a real answer.
+    TEST_CHECK( !LtrScaleNanoseconds( 0x6, nullptr ) );
+    TEST_CHECK( !LtrScaleNanoseconds( 0x7, nullptr ) );
+    TEST_CHECK( LtrScaleText( 0x6 ) == nullptr );
+
+    // Figure 40's byte 4: RQ [7], RSV [6:5], Latency Scale [4:2], LV[9:8] [1:0].
+    // The value is ten bits split across two bytes, so the two low bits of
+    // byte 4 are part of it and the scale sits between them and RSV.
+    const LtrMessage m = DecodeLtrMessage( 0x89, 0x2C );
+    TEST_CHECK( m.requirement );
+    TEST_CHECK_EQ( m.reserved, uint8_t( 0x0 ) );
+    TEST_CHECK_EQ( m.scale, uint8_t( 0x2 ) );
+    TEST_CHECK_EQ( m.value, uint16_t( 0x12C ) );
+
+    // Every field at once, to catch a shift that happens to work at zero.
+    const LtrMessage all = DecodeLtrMessage( 0xFF, 0xFF );
+    TEST_CHECK( all.requirement );
+    TEST_CHECK_EQ( all.reserved, uint8_t( 0x3 ) );
+    TEST_CHECK_EQ( all.scale, uint8_t( 0x7 ) );
+    TEST_CHECK_EQ( all.value, uint16_t( 0x3FF ) );
+
+    const LtrMessage none = DecodeLtrMessage( 0x00, 0x00 );
+    TEST_CHECK( !none.requirement );
+    TEST_CHECK_EQ( none.scale, uint8_t( 0x0 ) );
+    TEST_CHECK_EQ( none.value, uint16_t( 0x000 ) );
+
+    // A scale of 000b is a multiplier of 1 ns, not "no scale". Reading it as
+    // absent and reading it as 1 give the same answer for every value, which
+    // is why the encoding is checked rather than the product.
+    uint32_t one = 0;
+    TEST_CHECK( LtrScaleNanoseconds( 0x0, &one ) );
+    TEST_CHECK_EQ( one, 1u );
+}
+
 } // namespace
 
 int main()
@@ -947,6 +1482,14 @@ int main()
     TestVwireUnnamedIndices();
     TestVwireCountByte();
     TestVwireDataFormats();
+    TestPeripheralPackets();
+    TestCycleTypeEncodings();
+    TestCycleTypesAreChannelKeyed();
+    TestCycleTypeLsbRule();
+    TestCycleHeaderLayouts();
+    TestCycleLengthRules();
+    TestCycleVariableFields();
+    TestMessageCodesAndLtr();
     TestWaitState();
     TestMalformed();
     TestFixtureLoaderRejectsGarbage();

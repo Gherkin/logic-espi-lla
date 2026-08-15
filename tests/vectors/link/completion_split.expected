@@ -1,0 +1,79 @@
+Command
+  Opcode  0x01  GET_PC
+  CRC  0x07  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Cycle Type  0x06  Successful Completion Without Data
+    Command Type  Completion
+    Direction  target to controller
+  Tag  0x3
+  Length  0x000  driven to zero, as required
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x69  ok
+---
+Command
+  Opcode  0x01  GET_PC
+  CRC  0x07  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Cycle Type  0x0B  Successful Completion With Data
+    Command Type  Completion
+    Direction  either direction
+    Split Completion  0x1  first completion of a split completion sequence
+  Tag  0x3
+  Length  0x002  2 bytes
+  Data  2 bytes  AA 55
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x36  ok
+---
+Command
+  Opcode  0x01  GET_PC
+  CRC  0x07  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Cycle Type  0x0C  Unsuccessful Completion Without Data
+    Command Type  Completion
+    Direction  either direction
+    Split Completion  0x2  last completion of a split completion sequence
+  Tag  0x3
+  Length  0x000  driven to zero, as required
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xB4  ok
+---
+Command
+  Opcode  0x01  GET_PC
+  CRC  0x07  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Cycle Type  0x08  Unsuccessful Completion Without Data
+    Command Type  Completion
+    Direction  either direction
+    Split Completion  0x0  middle completion of a split completion sequence -- but P1 must be 1 on an Unsuccessful Completion without Data, which is always the last or the only completion [ERROR]
+  Tag  0x3
+  Length  0x000  driven to zero, as required
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x3B  ok

@@ -2,6 +2,7 @@
 
 #include "espi/ConfigRegisters.h"
 #include "espi/Crc8.h"
+#include "espi/CycleTypes.h"
 #include "espi/Opcodes.h"
 #include "espi/PacketShape.h"
 #include "espi/Responses.h"
@@ -11,6 +12,7 @@
 #include <cstdio>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace espi
 {
@@ -150,13 +152,40 @@ void AddStatusChildren( Field* status, uint16_t value )
     }
 }
 
-// Which configuration register a packet is talking about. GET_CONFIGURATION
-// puts the address in the command phase and the data in the response, so this
-// has to survive the turn-around.
-struct ConfigContext
+// What one transaction's elements need to know about each other.
+//
+// Two facts cross a phase boundary and one crosses the turn-around.
+// GET_CONFIGURATION puts the register address in the command phase and the
+// data in the response, so the address has to survive TAR. A cycle header
+// establishes how many payload bytes follow it, and the payload is a separate
+// element. The short cycles take their data length from the opcode, which was
+// read before either phase's elements.
+struct PacketContext
 {
+    // GET_CONFIGURATION / SET_CONFIGURATION
     bool have_address = false;
     uint16_t address = 0;
+
+    // Which channel's cycle type table applies. From the opcode (section 4.2,
+    // p.52: peripheral is channel 0, virtual wire 1, OOB 2, flash 3), because
+    // Table 5 note 3 says the byte alone does not identify a cycle type.
+    ChannelId channel = ChannelId::ChannelIndependent;
+
+    // C1C0 from a short opcode, resolved to bytes. Zero when the opcode is not
+    // a short cycle.
+    unsigned short_length = 0;
+
+    // Set by the CycleHeader element for the Payload element that follows it.
+    unsigned payload_bytes = 0;
+    bool have_cycle_header = false;
+
+    // The decode stopped on purpose, because something on the wire left the
+    // packet length unknown -- not because the source ran out. The two look
+    // identical to the caller of ReadElements and mean opposite things: one is
+    // a chip select deasserting mid-packet, the other is a gap in what has
+    // been transcribed, and reporting the second as the first would blame the
+    // bus for the analyzer's own limits.
+    bool stopped = false;
 };
 
 void AddChannelSupportChildren( Field* parent, uint32_t value )
@@ -509,8 +538,342 @@ bool ReadVwirePacket( PhaseReader* reader, Field* parent )
     return true;
 }
 
+// --- peripheral channel cycle headers -------------------------------------
+
+// Payload bytes rendered as hex, truncated so a 4 KB write does not produce a
+// 12,000 character line. The count is always stated in full alongside.
+std::string HexBytes( const std::vector<uint8_t>& bytes, size_t limit )
+{
+    std::string out;
+    for( size_t i = 0; i < bytes.size() && i < limit; ++i )
+    {
+        if( i != 0 )
+            out += ' ';
+        char buf[ 8 ];
+        std::snprintf( buf, sizeof( buf ), "%02X", bytes[ i ] );
+        out += buf;
+    }
+    if( bytes.size() > limit )
+        out += " ...";
+    return out;
+}
+
+// The Length field, read under whichever of section 4.1.3's three rules the
+// cycle type falls under. This is the single most consequential thing on this
+// path that Table 5 and the figures do not state: a Length of 000h on a memory
+// write is 4096 bytes, and reading it as zero loses the entire payload while
+// looking completely reasonable.
+Field LengthField( uint16_t raw, CycleLength meaning, unsigned* payload_bytes, ByteSpan span )
+{
+    Field f( "Length", Hex( raw, 3 ), raw, static_cast<uint8_t>( CycleLengthBits() ), span );
+
+    switch( meaning )
+    {
+    case CycleLength::OneBased:
+    {
+        const unsigned resolved = CycleResolvedLength( raw );
+        f.text += "  " + Plural( resolved, "byte" );
+        if( raw == 0 )
+            f.text += ", all zeros means 4 KB";
+        *payload_bytes = resolved;
+        break;
+    }
+    case CycleLength::MustBeZero:
+        // "the length field must be driven to zeros by initiator. The receiver
+        // must ignore the length field." So this is not a count at all, and a
+        // nonzero value is the initiator misbehaving rather than a payload.
+        f.text += raw == 0 ? "  driven to zero, as required" : "  must be driven to zero by the initiator";
+        if( raw != 0 )
+            f.severity = Severity::Warning;
+        *payload_bytes = 0;
+        break;
+    case CycleLength::Reserved:
+        f.text += raw == 0 ? "  Reserved for this cycle type, sent as all 0s" : "  Reserved for this cycle type, must be all 0s";
+        if( raw != 0 )
+            f.severity = Severity::Warning;
+        *payload_bytes = 0;
+        break;
+    }
+    return f;
+}
+
+// The four message specific bytes of Figure 38, resolved when the message code
+// is one Table 6 names. LTR is the only one the base specification defines.
+void AddMessageSpecific( Field* parent, uint8_t code, const uint8_t bytes[ 4 ], ByteSpan span )
+{
+    MessageCodeInfo msg;
+    if( !LookupMessageCode( code, &msg ) || !msg.fields_transcribed )
+    {
+        // Figure 38 gives every message four of these and says nothing about
+        // what is in them; only the message code decides, and this one is not
+        // a code with a transcribed layout.
+        for( int i = 0; i < 4; ++i )
+            parent->Add( Field( "Message Specific Byte " + std::to_string( i ), Hex( bytes[ i ], 2 ), bytes[ i ], 8, span ) );
+        return;
+    }
+
+    const LtrMessage ltr = DecodeLtrMessage( bytes[ 0 ], bytes[ 1 ] );
+
+    parent->Add( Field( "Requirement", BitText( 7, ltr.requirement ? 1u : 0u )
+                                           + ( ltr.requirement ? "  latency fields below are valid"
+                                                               : "  target has no service requirement" ),
+                        ltr.requirement ? 1u : 0u, 1, span ) );
+
+    if( ltr.requirement )
+    {
+        const char* scale_text = LtrScaleText( ltr.scale );
+        Field scale( "Latency Scale", Hex( ltr.scale, 1 ) + "  " + ( scale_text != nullptr ? scale_text : "Reserved" ),
+                     ltr.scale, 3, span );
+        if( scale_text == nullptr )
+            scale.severity = Severity::Warning;
+        parent->Add( std::move( scale ) );
+
+        Field value( "Latency Value", Hex( ltr.value, 3 ), ltr.value, 10, span );
+        uint32_t multiplier = 0;
+        if( LtrScaleNanoseconds( ltr.scale, &multiplier ) )
+        {
+            const uint64_t ns = static_cast<uint64_t>( ltr.value ) * multiplier;
+            value.text += "  " + std::to_string( ns ) + " ns";
+            // "Setting the Latency Value field to all 0's indicates that the
+            // eSPI target will be impacted by any delay and that the best
+            // possible service is requested" (p.56).
+            if( ltr.value == 0 )
+                value.text += ", best possible service requested";
+        }
+        parent->Add( std::move( value ) );
+    }
+    else
+    {
+        // Table 7: the remaining fields are only valid when RQ is set. Naming
+        // them without their values is the honest rendering, the same way a
+        // virtual wire under a clear valid bit is named but not read.
+        parent->Add( Field( "Masked", "Latency Scale, Latency Value  requirement bit clear, fields not valid", 0, 8, span ) );
+    }
+
+    if( ltr.reserved != 0 )
+    {
+        Field r( "Reserved", Hex( ltr.reserved, 1 ) + "  bits [6:5] must be driven to 0", ltr.reserved, 2, span );
+        r.severity = Severity::Warning;
+        parent->Add( std::move( r ) );
+    }
+
+    // Figure 40 draws bytes 6 and 7 as Reserved outright.
+    for( int i = 2; i < 4; ++i )
+    {
+        if( bytes[ i ] == 0 )
+            continue;
+        Field r( "Reserved", "byte " + std::to_string( i + 4 ) + " = " + Hex( bytes[ i ], 2 ) + "  must be driven to 0",
+                 bytes[ i ], 8, span );
+        r.severity = Severity::Warning;
+        parent->Add( std::move( r ) );
+    }
+}
+
+// Name the variable field a cycle type encoding carries, if it carries one.
+// Which field that is comes from the table row, not from the bit pattern --
+// P1P0, r2r1r0 and R1R0 sit in three different and partly overlapping ranges.
+void AddCycleVariable( Field* parent, const CycleTypeInfo& info, uint8_t cycle_type, ByteSpan span )
+{
+    const uint8_t value = CycleVariableValue( info, cycle_type );
+
+    switch( info.variable )
+    {
+    case CycleVariable::SplitCompletion:
+    {
+        const char* text = SplitCompletionText( value );
+        Field f( "Split Completion", Hex( value, 1 ) + "  " + ( text != nullptr ? text : "undefined" ), value, 2, span );
+        if( SplitCompletionViolatesNote2( info, cycle_type ) )
+        {
+            f.text += " -- but P1 must be 1 on an Unsuccessful Completion without Data, which is always the last or "
+                      "the only completion";
+            f.severity = Severity::Error;
+        }
+        parent->Add( std::move( f ) );
+        break;
+    }
+    case CycleVariable::MessageRouting:
+    {
+        const char* text = MessageRoutingText( value );
+        Field f( "Routing", Hex( value, 1 ) + "  " + ( text != nullptr ? text : "Reserved" ), value, 3, span );
+        if( text == nullptr )
+            f.severity = Severity::Warning;
+        parent->Add( std::move( f ) );
+        break;
+    }
+    case CycleVariable::RpmcTarget:
+    {
+        const char* text = RpmcTargetText( value );
+        parent->Add( Field( "RPMC Target", Hex( value, 1 ) + "  " + ( text != nullptr ? text : "undefined" ), value, 2, span ) );
+        break;
+    }
+    case CycleVariable::None:
+        break;
+    }
+}
+
+// One cycle-type-headed packet header. Returns false when the header cannot be
+// read to its end -- either the source ran out or the cycle type gives no
+// length to read to, in which case the caller stops rather than guessing.
+bool ReadCycleHeader( PhaseReader* reader, Field* parent, PacketContext* ctx )
+{
+    ctx->have_cycle_header = false;
+    ctx->payload_bytes = 0;
+
+    uint8_t cycle_type = 0;
+    ByteSpan type_span{};
+    if( !reader->Read( &cycle_type, &type_span ) )
+        return false;
+
+    CycleTypeInfo info;
+    if( !LookupCycleType( ctx->channel, cycle_type, &info ) )
+    {
+        // Deliberately not "unknown cycle type": the same byte may well be a
+        // defined cycle type on another channel, and saying which channel was
+        // consulted is what turns this from a dead end into a diagnosis.
+        parent->Add( ErrorField( "Cycle Type", Hex( cycle_type, 2 ) + "  no cycle type with this encoding on the "
+                                                   + ChannelName( ctx->channel )
+                                                   + " channel -- packet length unknown, decode stopped" ) );
+        ctx->stopped = true;
+        return false;
+    }
+
+    Field type_field( "Cycle Type", Hex( cycle_type, 2 ) + "  " + info.name, cycle_type, 8, type_span );
+    type_field.Add( Field( "Command Type", CycleCommandTypeName( info.command_type ), 0, 8, type_span ) );
+    type_field.Add( Field( "Direction", CycleDirectionText( info.direction ), 0, 8, type_span ) );
+    AddCycleVariable( &type_field, info, cycle_type, type_span );
+
+    CycleHeaderLayout layout;
+    if( !LookupCycleHeaderLayout( info.layout, &layout ) )
+    {
+        Field gap( "Packet Format",
+                   std::string( info.name ) + " -- header layout not transcribed yet, packet length unknown, decode stopped",
+                   cycle_type, 8, type_span );
+        gap.severity = Severity::Warning;
+        type_field.Add( std::move( gap ) );
+        parent->Add( std::move( type_field ) );
+        ctx->stopped = true;
+        return false;
+    }
+    parent->Add( std::move( type_field ) );
+
+    // Byte 1 is Tag over Length[11:8] and byte 2 is Length[7:0] -- Figure 33,
+    // p.46, and every packet figure repeats it.
+    uint8_t byte1 = 0;
+    uint8_t byte2 = 0;
+    ByteSpan tag_span{};
+    ByteSpan len_span{};
+    if( !reader->Read( &byte1, &tag_span ) || !reader->Read( &byte2, &len_span ) )
+        return false;
+
+    const uint8_t tag = CycleTagOf( byte1 );
+    parent->Add( Field( "Tag", Hex( tag, 1 ), tag, 4, tag_span ) );
+
+    unsigned payload = 0;
+    parent->Add( LengthField( CycleLengthOf( byte1, byte2 ), layout.length, &payload, Merge( tag_span, len_span ) ) );
+    ctx->payload_bytes = layout.has_payload ? payload : 0;
+
+    if( layout.address_bytes != 0 )
+    {
+        uint64_t address = 0;
+        ByteSpan addr_span{};
+        if( !reader->ReadInteger( layout.address_bytes, /*msb_first=*/true, &address, &addr_span ) )
+            return false;
+        Field addr( "Address", Hex( address, layout.address_bytes * 2 ), address,
+                    static_cast<uint8_t>( layout.address_bytes * 8 ), addr_span );
+        // Section 4.1.4, p.51: "When 64 bits addressing format is used, the
+        // upper 32 bits address [63:32] must not be all 0" -- an address below
+        // 4 GB has to use the 32-bit format.
+        if( layout.address_bytes == 8 && ( address >> 32 ) == 0 )
+        {
+            addr.text += "  below 4 GB, which must use the 32 bit addressing format";
+            addr.severity = Severity::Warning;
+        }
+        parent->Add( std::move( addr ) );
+    }
+
+    if( layout.has_message_code )
+    {
+        uint8_t code = 0;
+        ByteSpan code_span{};
+        if( !reader->Read( &code, &code_span ) )
+            return false;
+
+        MessageCodeInfo msg;
+        const bool named = LookupMessageCode( code, &msg );
+        Field code_field( "Message Code", Hex( code, 2 ) + ( named ? std::string( "  " ) + msg.name + ", " + msg.description
+                                                                  : std::string( "  not a message code Table 6 names" ) ),
+                          code, 8, code_span );
+        if( !named )
+            code_field.severity = Severity::Warning;
+
+        uint8_t specific[ 4 ] = { 0, 0, 0, 0 };
+        ByteSpan specific_span{};
+        for( int i = 0; i < 4; ++i )
+        {
+            ByteSpan one{};
+            if( !reader->Read( &specific[ i ], &one ) )
+            {
+                parent->Add( std::move( code_field ) );
+                return false;
+            }
+            specific_span = ( i == 0 ) ? one : Merge( specific_span, one );
+        }
+        AddMessageSpecific( &code_field, code, specific, specific_span );
+        parent->Add( std::move( code_field ) );
+    }
+
+    ctx->have_cycle_header = true;
+    return true;
+}
+
+// The data bytes a cycle header's Length counted. Emits nothing when there are
+// none: "Payload 0 bytes" on every memory read request is noise, and the cycle
+// type name already says whether the packet carries data.
+bool ReadPayload( PhaseReader* reader, Field* parent, const PacketContext& ctx )
+{
+    if( !ctx.have_cycle_header || ctx.payload_bytes == 0 )
+        return true;
+
+    std::vector<uint8_t> bytes;
+    bytes.reserve( ctx.payload_bytes );
+    ByteSpan span{};
+    for( unsigned i = 0; i < ctx.payload_bytes; ++i )
+    {
+        uint8_t byte = 0;
+        ByteSpan one{};
+        if( !reader->Read( &byte, &one ) )
+            return false;
+        bytes.push_back( byte );
+        span = ( i == 0 ) ? one : Merge( span, one );
+    }
+
+    parent->Add( Field( "Data", Plural( ctx.payload_bytes, "byte" ) + "  " + HexBytes( bytes, 16 ), 0, 8, span ) );
+    return true;
+}
+
+// The 1, 2 or 4 data bytes of a short cycle. The count is C1C0 in the opcode
+// (Table 2 note 1, p.27); there is no length field on the wire at all.
+bool ReadShortData( PhaseReader* reader, Field* parent, const PacketContext& ctx )
+{
+    std::vector<uint8_t> bytes;
+    bytes.reserve( ctx.short_length );
+    ByteSpan span{};
+    for( unsigned i = 0; i < ctx.short_length; ++i )
+    {
+        uint8_t byte = 0;
+        ByteSpan one{};
+        if( !reader->Read( &byte, &one ) )
+            return false;
+        bytes.push_back( byte );
+        span = ( i == 0 ) ? one : Merge( span, one );
+    }
+
+    parent->Add( Field( "Data", Plural( ctx.short_length, "byte" ) + "  " + HexBytes( bytes, 16 ), 0, 8, span ) );
+    return true;
+}
+
 // Walk one phase's elements. Returns false if the source ran out mid-packet.
-bool ReadElements( PhaseReader* reader, const ElementList& list, Field* parent, ConfigContext* config )
+bool ReadElements( PhaseReader* reader, const ElementList& list, Field* parent, PacketContext* config )
 {
     for( uint8_t i = 0; i < list.count; ++i )
     {
@@ -522,9 +885,31 @@ bool ReadElements( PhaseReader* reader, const ElementList& list, Field* parent, 
                 return false;
             continue;
         }
+        if( element == Element::CycleHeader )
+        {
+            if( !ReadCycleHeader( reader, parent, config ) )
+                return false;
+            continue;
+        }
+        if( element == Element::Payload )
+        {
+            if( !ReadPayload( reader, parent, *config ) )
+                return false;
+            continue;
+        }
+        if( element == Element::ShortData )
+        {
+            if( !ReadShortData( reader, parent, *config ) )
+                return false;
+            continue;
+        }
 
         const size_t size = ElementFixedSize( element );
-        const bool msb_first = ( element == Element::Addr16 );
+        // Addresses are big endian everywhere they appear: the configuration
+        // register address (section 5.1, p.86) and both short cycle address
+        // widths (Figures 35 and 37, whose Byte 0 is the most significant).
+        const bool msb_first =
+            ( element == Element::Addr16 || element == Element::IoAddr16 || element == Element::MemAddr32 );
         uint64_t value = 0;
         ByteSpan span{};
         if( !reader->ReadInteger( size, msb_first, &value, &span ) )
@@ -569,7 +954,7 @@ bool LinkDecoder::Decode( Transaction* out )
         return false;
 
     Transaction txn;
-    ConfigContext config;
+    PacketContext config;
 
     // ----------------------------------------------------------------- command
     PhaseReader cmd( mSource, Phase::Command );
@@ -595,8 +980,27 @@ bool LinkDecoder::Decode( Transaction* out )
     }
 
     command.Add( MakeField( "Opcode", Hex( opcode, 2 ) + "  " + info.name, opcode, 8, opcode_span ) );
-    if( info.length_reserved )
-        command.Add( ErrorField( "Request Length", "C1C0 = 10b is Reserved" ) );
+
+    // The channel decides which cycle type table applies -- Table 5 note 3,
+    // p.49, is explicit that the encodings repeat across channels.
+    config.channel = info.channel;
+
+    if( info.has_short_length )
+    {
+        // C1C0 is not a label: it is the only statement of how many data bytes
+        // the packet holds, so a reserved encoding leaves the packet length
+        // unknown and the decode has to stop rather than pick a size.
+        if( info.length_reserved )
+        {
+            command.Add( ErrorField( "Request Length",
+                                     "C1C0 = 10b is Reserved -- packet length unknown, decode stopped" ) );
+            txn.fields.push_back( std::move( command ) );
+            *out = std::move( txn );
+            return true;
+        }
+        config.short_length = info.request_length;
+        command.Add( MakeField( "Request Length", Plural( info.request_length, "byte" ), info.request_length, 8, opcode_span ) );
+    }
 
     PacketShape shape;
     if( !LookupShape( opcode, &shape ) )
@@ -611,7 +1015,7 @@ bool LinkDecoder::Decode( Transaction* out )
 
     if( !ReadElements( &cmd, shape.command, &command, &config ) )
     {
-        txn.truncated = true;
+        txn.truncated = !config.stopped;
         txn.fields.push_back( std::move( command ) );
         *out = std::move( txn );
         return true;
@@ -713,7 +1117,20 @@ bool LinkDecoder::Decode( Transaction* out )
 
     // The response byte is already folded in above, so the reader starts from
     // the payload and its CRC is combined with the response byte's.
-    ElementList response_elements = shape.response;
+    //
+    // A response that is not ACCEPT carries no completion. Figures 24 and 25,
+    // pp.38-39, are the same PUT_NP answered both ways -- `ACCEPT HDR DATA STS
+    // CRC` and `DEFER STS CRC` -- so this is not cosmetic: it decides how many
+    // bytes the phase holds and therefore which byte the CRC lands on.
+    ElementList response_elements;
+    for( uint8_t i = 0; i < shape.response.count; ++i )
+    {
+        const Element element = shape.response.items[ i ];
+        if( rinfo.code != ResponseCode::Accept && ElementPresentOnlyOnAccept( element ) )
+            continue;
+        response_elements.items[ response_elements.count++ ] = element;
+    }
+
     if( modifier_applies && rinfo.modifier == 0x2 )
     {
         // A virtual wire packet is appended ahead of the status trailer.
@@ -735,7 +1152,7 @@ bool LinkDecoder::Decode( Transaction* out )
 
     if( !ReadElements( &rsp, response_elements, &response, &config ) )
     {
-        txn.truncated = true;
+        txn.truncated = !config.stopped;
         txn.fields.push_back( std::move( response ) );
         *out = std::move( txn );
         return true;

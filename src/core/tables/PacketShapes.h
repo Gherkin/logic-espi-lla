@@ -38,6 +38,34 @@
 //  calls for one. Only the virtual wire append is transcribed -- a peripheral
 //  or flash completion needs the cycle-type header layouts, which are not
 //  transcribed yet, and is reported as an explicit gap.
+//
+//  WHICH PHASE CARRIES THE PACKET is read off the transaction diagrams in
+//  section 3, not guessed from the opcode's name. Four figures decide the
+//  peripheral rows below, and they do not all agree with the obvious reading:
+//
+//    Figure 24, p.38   PUT_NP HDR CRC      -> ACCEPT HDR DATA STS CRC
+//    Figure 25, p.39   PUT_NP HDR CRC      -> DEFER STS CRC
+//                      GET_PC CRC          -> ACCEPT HDR DATA STS CRC
+//    Figure 26, p.40   PUT_IORD_SHORT HDR CRC       -> RESPONSE Data STS CRC
+//                      PUT_IOWR_SHORT HDR Data CRC  -> RESPONSE STS CRC
+//                      PUT_MEMRD32_SHORT HDR CRC    -> RESPONSE Data STS CRC
+//    Figure 27, p.41   GET_NP CRC          -> ACCEPT HDR STS CRC
+//                      PUT_PC HDR DATA CRC -> ACCEPT STS CRC
+//
+//  Two things fall out of that which a row on its own would not tell you.
+//
+//  First, a PUT is not always the side carrying the packet. PUT_NP puts a
+//  request and gets a *completion* back in the same transaction when the
+//  target can answer immediately, so its response phase carries a header and
+//  data even though the command did too. The elements marked as completion
+//  bearing appear only when the response is ACCEPT -- Figure 25 shows the same
+//  command answered with DEFER and no header at all.
+//
+//  Second, the short reads do not return a completion header. Figure 26 draws
+//  their response as `RESPONSE Data STS CRC` -- raw bytes, no cycle type, no
+//  tag, no length -- while Figure 24 draws the long form's response with a
+//  full header. The two are eight lines apart in the same section and are the
+//  obvious pair to flatten into one shape.
 // ---------------------------------------------------------------------------
 
 // X( OPCODE_NAME, COMMAND_ELEMENTS, RESPONSE_ELEMENTS )
@@ -48,6 +76,16 @@
     X( GET_STATUS, ESPI_CMD(), ESPI_RSP( Status16 ) )                                                                              \
     /* --- Virtual Wire Channel, Figure 41, p.58 --- */                                                                            \
     X( GET_VWIRE, ESPI_CMD(), ESPI_RSP( VwirePacket, Status16 ) )                                                                  \
-    X( PUT_VWIRE, ESPI_CMD( VwirePacket ), ESPI_RSP( Status16 ) )
+    X( PUT_VWIRE, ESPI_CMD( VwirePacket ), ESPI_RSP( Status16 ) )                                                                  \
+    /* --- Peripheral Channel, Figures 24/25/27, pp.38-41 --- */                                                                   \
+    X( PUT_PC, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )                                                            \
+    X( PUT_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( CycleHeader, Payload, Status16 ) )                                      \
+    X( GET_PC, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )                                                            \
+    X( GET_NP, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )                                                            \
+    /* --- Peripheral Channel short cycles, Figure 26, p.40 --- */                                                                 \
+    X( PUT_IORD_SHORT, ESPI_CMD( IoAddr16 ), ESPI_RSP( ShortData, Status16 ) )                                                     \
+    X( PUT_IOWR_SHORT, ESPI_CMD( IoAddr16, ShortData ), ESPI_RSP( Status16 ) )                                                     \
+    X( PUT_MEMRD32_SHORT, ESPI_CMD( MemAddr32 ), ESPI_RSP( ShortData, Status16 ) )                                                 \
+    X( PUT_MEMWR32_SHORT, ESPI_CMD( MemAddr32, ShortData ), ESPI_RSP( Status16 ) )
 
 #endif // ESPI_TABLE_PACKET_SHAPES_H

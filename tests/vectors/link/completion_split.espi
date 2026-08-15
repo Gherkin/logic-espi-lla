@@ -1,0 +1,49 @@
+# The completion encodings, across the whole P1P0 field.
+#
+# HAND BUILT FROM THE SPECIFICATION. See put_pc_memory_write32.espi.
+#
+# Table 5's three completion rows differ from each other in two bits and in
+# nothing else, and one of them differs from its own flash-channel twin in the
+# Direction column alone. Every transaction below is a GET_PC whose response
+# carries a different completion.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4). The command is `01 07` in
+# all four.
+
+# Successful Completion Without Data, 00000110b.
+#
+# THE DIRECTION COLUMN. This row is "Up" -- target to controller only -- while
+# the identically named row in the flash section of the same table, eight
+# lines later on the next page, is "Up/Down". Nothing about a decoded packet
+# looks wrong if the two are flattened together, which is why the direction is
+# rendered rather than merely transcribed.
+#
+# Length must be zero here, and for a different reason than usual. Section
+# 4.1.3, p.50: "For Completion without Data or Un-Successful Completion, the
+# length field must be driven to zeros by initiator. The receiver must ignore
+# the length field." So the 4 KB rule does NOT apply -- 000h means zero, not
+# 4096, and the two readings sit three sentences apart on one page.
+CMD 01 07
+TAR
+RSP 08 06 30 00 0F 01 69
+
+# Successful Completion With Data, P1P0 = 01b: the FIRST completion of a split
+# sequence. Note 1, p.49, orders the encodings 00b middle, 01b first, 10b last,
+# 11b only -- which is not the order anyone guesses.
+CMD 01 07
+TAR
+RSP 08 0B 30 02 AA 55 0F 01 36
+
+# Unsuccessful Completion Without Data, P1P0 = 10b: the last completion.
+CMD 01 07
+TAR
+RSP 08 0C 30 00 0F 01 B4
+
+# The same, P1P0 = 00b -- a middle completion. Note 2, p.49: "For Unsuccessful
+# Completion without Data, P1 must be always a '1' as this is always the last
+# or the only completion." So this encoding is legal-looking and cannot occur:
+# the packet decodes perfectly and is still malformed. Nothing but the note
+# catches it.
+CMD 01 07
+TAR
+RSP 08 08 30 00 0F 01 3B

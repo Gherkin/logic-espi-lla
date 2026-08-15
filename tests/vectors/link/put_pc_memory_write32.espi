@@ -1,0 +1,26 @@
+# PUT_PC carrying a Memory Write 32, four bytes of payload.
+#
+# HAND BUILT FROM THE SPECIFICATION, NOT FROM THE CAPTURE. espi_dump.txt is a
+# link coming up and contains no peripheral channel traffic at all -- only
+# GET_CONFIGURATION, SET_CONFIGURATION and GET_VWIRE. Every peripheral fixture
+# in this directory is therefore written from the pages by the same person who
+# wrote the decoder, and proves the decoder agrees with that reading rather
+# than that the reading is right. Only the QC pass closes that.
+#
+# Command phase, from Figure 27 p.41 (PUT_PC HDR DATA CRC) and Figure 34 p.53:
+#
+#   00     PUT_PC                          Table 2, p.25
+#   01     Cycle Type: Memory Write 32     Table 5, p.47. Bit 0 set is the
+#                                          "with data" half of the LSB rule
+#                                          in section 4.1.1, p.46.
+#   30     Tag 3, Length[11:8] = 0h        Figure 33, p.46
+#   04     Length[7:0] = 04h               -> 4 bytes, section 4.1.3 p.50
+#   FE D4 00 00   Address, MSB first       Figure 34: Byte 3 is Address[31:24]
+#   DE AD BE EF   Data Byte 0 through 3
+#   26     CRC, pasted from tools/crc_ref.py (rule R4)
+#
+# Response phase is ACCEPT with nothing but the status trailer: a posted write
+# gets no completion, which is exactly what Figure 27 draws.
+CMD 00 01 30 04 FE D4 00 00 DE AD BE EF 26
+TAR
+RSP 08 0F 01 95

@@ -33,7 +33,11 @@ SOURCE_RE = re.compile(r"^//\s+SOURCE\s+(.*?)\s*$")
 # The banner title is the first comment line after the opening divider.
 DIVIDER_RE = re.compile(r"^//\s*-{10,}\s*$")
 TITLE_RE = re.compile(r"^//\s{2}(\S.*?)\s*$")
-TABLE_DEF_RE = re.compile(r"^#define\s+(ESPI_\w*TABLE)\s*\(\s*X\s*\)")
+# A one-row table is often written entirely on the #define line. Capturing the
+# tail matters: those tables are usually one row precisely because the
+# specification defines exactly one encoding, which is a fact worth checking,
+# not a fact too small to bother with.
+TABLE_DEF_RE = re.compile(r"^#define\s+(ESPI_\w*TABLE)\s*\(\s*X\s*\)\s*(.*?)\s*$")
 # Entries may carry a trailing block comment, e.g. `X( 0x2, 0 ) /* Reserved */`.
 # Capturing it matters: dropping the row would hide the Reserved encoding from
 # the very checklist meant to catch a wrong Reserved encoding.
@@ -51,20 +55,36 @@ def split_args(text: str) -> list:
     has `ESPI_CMD( Addr16, Data32 )` as a single argument. Splitting naively
     tears that into two cells and the worksheet shows a row that does not
     correspond to anything in the header, which is worse than showing nothing.
+
+    A cell may also be a string containing a comma, as the LTR latency scales
+    do: "1,024 ns". Splitting inside the quotes turns one value into two cells
+    and prints it as `"1    024 ns"`, which a reader then has to reconstruct
+    before they can check it against the page.
     """
-    args, depth, current = [], 0, ""
+    args, depth, current, in_string = [], 0, "", False
     for ch in text:
-        if ch == "," and depth == 0:
-            args.append(current.strip())
-            current = ""
-            continue
-        if ch in "([":
-            depth += 1
-        elif ch in ")]":
-            depth -= 1
+        if ch == '"':
+            in_string = not in_string
+        elif not in_string:
+            if ch == "," and depth == 0:
+                args.append(current.strip())
+                current = ""
+                continue
+            if ch in "([":
+                depth += 1
+            elif ch in ")]":
+                depth -= 1
         current += ch
     args.append(current.strip())
     return [a for a in args if a]
+
+
+def strip_continuation(line: str) -> str:
+    """Drop a trailing macro line-continuation backslash."""
+    stripped = line.rstrip()
+    if stripped.endswith("\\"):
+        stripped = stripped[:-1].rstrip()
+    return stripped
 
 
 def parse_header(path: Path) -> dict:
@@ -72,6 +92,11 @@ def parse_header(path: Path) -> dict:
     banner = {"title": None, "source": ""}
     tables, current, group = [], None, None
     in_source, after_divider = False, False
+    # A table row too wide for one line wraps, and a row-per-line parser drops
+    # it without a word -- which is the one bug this worksheet must not have,
+    # because a row that never reaches the checklist is a row nobody checks.
+    # Rows are therefore accumulated until their parentheses balance.
+    pending = ""
 
     for line in lines:
         m = SOURCE_RE.match(line)
@@ -105,22 +130,48 @@ def parse_header(path: Path) -> dict:
         if m:
             current = {"macro": m.group(1), "entries": []}
             tables.append(current)
-            group = None
+            group, pending = None, ""
+            tail = strip_continuation(m.group(2)).strip()
+            if tail.startswith("X("):
+                em = ENTRY_RE.match(tail)
+                if em:
+                    current["entries"].append((None, split_args(em.group(1)), em.group(2) or ""))
+                    current = None
             continue
 
         if current is not None:
-            m = GROUP_RE.match(line)
-            if m and m.group(1):
-                group = m.group(1)
+            if not pending:
+                m = GROUP_RE.match(line)
+                if m and m.group(1):
+                    group = m.group(1)
+                    continue
+
+            body = strip_continuation(line).strip()
+            if pending:
+                pending = f"{pending} {body}"
+            elif body.startswith("X("):
+                pending = body
+            else:
+                if line.strip() == "" or not line.rstrip().endswith("\\"):
+                    if current["entries"]:
+                        current = None
                 continue
-            m = ENTRY_RE.match(line)
+
+            # Keep going until the row closes. Counting parentheses rather than
+            # looking for a trailing ')' is what lets a cell hold its own list,
+            # as the packet shape table's ESPI_CMD( ... ) cells do.
+            if pending.count("(") > pending.count(")"):
+                continue
+
+            m = ENTRY_RE.match(pending)
             if m:
                 args = split_args(m.group(1))
                 current["entries"].append((group, args, m.group(2) or ""))
-                continue
-            if line.strip() == "" or not line.rstrip().endswith("\\"):
-                if current["entries"]:
-                    current = None
+            pending = ""
+
+            # The last row of a table carries no continuation backslash.
+            if not line.rstrip().endswith("\\") and current["entries"]:
+                current = None
 
     banner["file"] = path.name
     banner["path"] = str(path).replace("\\", "/")

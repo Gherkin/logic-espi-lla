@@ -1,0 +1,33 @@
+Command
+  Opcode  0x41  PUT_IORD_SHORT
+  Request Length  2 bytes
+  Address  0x0062
+  CRC  0xC4  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  2 bytes  AA 55
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x5A  ok
+---
+Command
+  Opcode  0x4F  PUT_MEMWR32_SHORT
+  Request Length  4 bytes
+  Address  0xFED40010
+  Data  4 bytes  01 02 03 04
+  CRC  0xC3  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok

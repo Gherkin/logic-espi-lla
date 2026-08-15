@@ -1,0 +1,49 @@
+# The four short peripheral cycles.
+#
+# HAND BUILT FROM THE SPECIFICATION. See put_pc_memory_write32.espi.
+#
+# These are the one peripheral packet with no cycle type byte at all. Section
+# 3.8, p.39: "The unique opcode indicates the type of non-posted transaction
+# and the request length. The header contains the address only and the number
+# of address bytes for the transaction is implied by the opcode. The short
+# non-posted transaction does not have the Tag field."
+#
+# So there is no cycle type, no tag and no length on the wire. C1C0 in the low
+# two bits of the opcode is the only statement of how many data bytes the
+# packet holds, which makes it a length field that lives in the opcode table
+# rather than in the packet -- and makes the reserved encoding 10b a genuinely
+# undecodable packet rather than a mislabelled one. That case is in
+# malformed.espi.
+#
+# WHERE THE DATA SITS depends on the direction of the transfer, and Figure 26
+# p.40 draws all three of the controller-initiated forms:
+#
+#   PUT_IORD_SHORT     HDR CRC            ->  RESPONSE Data STS CRC
+#   PUT_IOWR_SHORT     HDR Data CRC       ->  RESPONSE STS CRC
+#   PUT_MEMRD32_SHORT  HDR CRC            ->  RESPONSE Data STS CRC
+#
+# Note what the read responses do NOT have: a completion header. Figure 24 on
+# p.38 gives the long form's response a full `HDR DATA` and Figure 26 gives the
+# short form's response bare data bytes. The two figures are two pages apart
+# and are the obvious pair to flatten into one shape.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4).
+
+# PUT_IORD_SHORT with C1C0 = 01b -> 2 bytes. Opcode 41h, not 40h: the mask in
+# Table 2 is FCh, so all four of 40h-43h are the same command with different
+# request lengths. An exact-match opcode lookup reports 41h as undefined.
+#
+# The address is 2 bytes, MSB first -- Figure 37, p.54, right hand side.
+CMD 41 00 62 C4
+TAR
+RSP 08 AA 55 0F 01 5A
+
+# PUT_MEMWR32_SHORT with C1C0 = 11b -> 4 bytes. Opcode 4Fh.
+#
+# This one is POSTED while the other three short cycles are non-posted --
+# Table 2, p.26, has it needing the target "free to take the Posted or
+# Completion packet" where PUT_IOWR_SHORT, its obvious twin, says Non-Posted.
+# The address is 4 bytes, MSB first, Figure 35 p.53.
+CMD 4F FE D4 00 10 01 02 03 04 C3
+TAR
+RSP 08 0F 01 95

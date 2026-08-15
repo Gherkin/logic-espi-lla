@@ -1,0 +1,49 @@
+# PUT_PC carrying an LTR message.
+#
+# HAND BUILT FROM THE SPECIFICATION. See put_pc_memory_write32.espi.
+#
+# The Message cycle type is the one peripheral packet whose Length field is
+# neither a byte count nor a 4 KB flag. Page 55: "For Message cycle type, the
+# Length field is Reserved and it must be sent with all 0s." That sentence is
+# nowhere near Table 5 and nowhere near Figure 38 -- it is in the prose between
+# the completion figure and Table 6.
+#
+# Table 6, p.55, is a one-row table the plan never mentions: LTR is the only
+# message code the base specification defines, and it decides what the four
+# message specific bytes of Figure 38 mean.
+#
+#   00     PUT_PC
+#   10     Cycle Type: 0001 r2r1r0 0 with r2r1r0 = 000b
+#          Message, routing "Local -- terminated at receiver" (note 5, p.49)
+#   00     Tag 0, Length[11:8] = 0h
+#   00     Length[7:0] = 00h                Figure 40 draws these two as the
+#                                           literal cells 0h and 00h rather
+#                                           than as fields, because LTR "uses
+#                                           Message cycle Type with no data
+#                                           payload" (p.56).
+#   01     Message Code = LTR               Table 6, p.55
+#   89     RQ=1, RSV=00b, LS=010b, LV[9:8]=01b     Figure 40, p.56
+#   2C     LV[7:0] = 2Ch
+#   00 00  Reserved                         Figure 40 bytes 6 and 7
+#
+# LS=010b is "Value times 1,024 ns" and LV is 01_0010_1100b = 300, so the
+# reported tolerance is 307,200 ns. Table 7, p.57.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4).
+CMD 00 10 00 00 01 89 2C 00 00 7B
+TAR
+RSP 08 0F 01 95
+
+# The same message with the Requirement bit clear. Table 7, p.57: "A '0'
+# indicates that eSPI target has no service requirement. When this bit is a
+# '1', the remaining fields are valid to indicate latency tolerance requirement
+# for the eSPI target."
+#
+# So the scale and value below are not a zero-nanosecond tolerance -- they are
+# fields the target said not to read, and printing "0 ns" here would invent a
+# requirement out of a target explicitly disclaiming one. Same shape of mistake
+# as reading a virtual wire level under a clear valid bit, which the capture
+# caught in stage C.
+CMD 00 10 00 00 01 00 00 00 00 55
+TAR
+RSP 08 0F 01 95

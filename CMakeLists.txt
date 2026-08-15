@@ -35,6 +35,7 @@ add_library(espi_core STATIC
     src/core/src/PacketShapes.cpp
     src/core/src/ConfigRegisters.cpp
     src/core/src/VirtualWires.cpp
+    src/core/src/CycleTypes.cpp
     src/core/src/LinkDecoder.cpp
 )
 

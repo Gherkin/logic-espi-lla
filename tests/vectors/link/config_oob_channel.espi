@@ -1,0 +1,21 @@
+# The OOB message channel coming up: read its capabilities, then enable it.
+#
+# Transcribed byte for byte from tests/vectors/espi_dump.txt -- the read is
+# lines 83-96 and the write is lines 97-110, consecutive on the bus.
+#
+# Register 0030h is Channel 2 Capabilities and Configurations (Table 21, p.93).
+# This is the register the capture polls hardest: 53 of its 57 configuration
+# addresses are 0030h, the controller waiting for the EC to report ready.
+#
+# First transaction, target answers 00000110h: 64 byte payload selected, 64
+# byte payload supported, channel neither ready nor enabled.
+CMD 21 00 30 B8
+TAR
+RSP 08 10 01 00 00 0F 01 D2
+
+# Second transaction, controller writes 00000101h: same 64 byte payload, and
+# bit 0 set to enable the channel. The supported field reads back as 0 here
+# because it is read-only and the controller drives zeros into it.
+CMD 22 00 30 01 01 00 00 33
+TAR
+RSP 08 0F 01 95

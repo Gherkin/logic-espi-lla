@@ -1,0 +1,26 @@
+# GET_CONFIGURATION of 0020h with both virtual wire count fields at maximum.
+#
+# HAND BUILT FROM THE SPECIFICATION, NOT FROM THE CAPTURE. The capture only
+# ever shows counts of 0 and 7.
+#
+# It exists because the mutation runner found the gap those small values left.
+# Both count fields are six bits wide (21:16 and 13:8, p.99), but a value of 7
+# fits in three, so a table that declared the field one bit too narrow decoded
+# every real transaction correctly and survived. 3Fh exercises the full width.
+#
+# 003F3F03h decodes as:
+#
+#   bits 21:16  Operating Maximum Virtual Wire Count   3Fh  63 -> 64 groups
+#   bits 13:8   Maximum Virtual Wire Count Supported   3Fh  63 -> 64 groups
+#   bit 1       Virtual Wire Channel Ready             1
+#   bit 0       Virtual Wire Channel Enable            1
+#
+# 64 groups is the specification's stated maximum for a single virtual wire
+# packet (§4.2.2, p.57), so this is the largest legal value, not an arbitrary
+# one. On the wire the DWord goes least significant byte first: 03 3F 3F 00.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4): C8h over {21 00 20},
+# 48h over {08 03 3F 3F 00 0F 01}.
+CMD 21 00 20 C8
+TAR
+RSP 08 03 3F 3F 00 0F 01 48

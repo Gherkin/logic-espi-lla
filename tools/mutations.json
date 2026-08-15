@@ -210,6 +210,91 @@
       "find": "X( GET_STATUS, ESPI_CMD(), ESPI_RSP( Status16 ) )",
       "replace": "X( GET_STATUS, ESPI_CMD( Addr16 ), ESPI_RSP( Status16 ) )",
       "tests": "test_link"
+    },
+
+    {
+      "label": "config: Channel 1 register moved off offset 020h",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x020, \"Channel 1 Capabilities and Configurations\" )",
+      "replace": "X( 0x024, \"Channel 1 Capabilities and Configurations\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: Channel 2 and Channel 3 register names swapped",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x030, \"Channel 2 Capabilities and Configurations\" )",
+      "replace": "X( 0x030, \"Channel 3 Capabilities and Configurations\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: address mask 12 bits -> 16 bits",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "#define ESPI_CONFIG_ADDRESS_MASK 0x0FFFu",
+      "replace": "#define ESPI_CONFIG_ADDRESS_MASK 0xFFFFu",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: VW operating count field one bit too narrow",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x020, 21, 16, \"Operating Maximum Virtual Wire Count\", None, true )",
+      "replace": "X( 0x020, 20, 16, \"Operating Maximum Virtual Wire Count\", None, true )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: VW supported count no longer 0-based",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x020, 13, 8, \"Maximum Virtual Wire Count Supported\", None, true )",
+      "replace": "X( 0x020, 13, 8, \"Maximum Virtual Wire Count Supported\", None, false )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: VW channel enable and ready bits swapped",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x020, 0, 0, \"Virtual Wire Channel Enable\", None, false )",
+      "replace": "X( 0x020, 1, 1, \"Virtual Wire Channel Enable\", None, false )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: I/O Mode Select 01b decoded as Quad",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( IoModeSelect, 0x1, \"Dual I/O\" )",
+      "replace": "X( IoModeSelect, 0x1, \"Quad I/O\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: 50 MHz frequency encoding mislabelled",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( Frequency, 0x3, \"50 MHz\" )",
+      "replace": "X( Frequency, 0x3, \"40 MHz\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: max payload 001b decoded as 32 bytes",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( MaxPayload, 0x1, \"64 bytes\" )",
+      "replace": "X( MaxPayload, 0x1, \"32 bytes\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: WAIT STATE 0h read as zero rather than 16",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( WaitState, 0x0, \"16 byte times\" )",
+      "replace": "X( WaitState, 0x0, \"0 byte times\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: Virtual Wire channel-supported bit moved",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 1, \"Virtual Wire Channel\" )",
+      "replace": "X( 5, \"Virtual Wire Channel\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: OOB payload selected field read from the supported bits",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x030, 10, 8, \"OOB Message Channel Maximum Payload Size Selected\", MaxPayload, false )",
+      "replace": "X( 0x030, 6, 4, \"OOB Message Channel Maximum Payload Size Selected\", MaxPayload, false )",
+      "tests": "test_link"
     }
   ]
 }

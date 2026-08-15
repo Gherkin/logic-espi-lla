@@ -1,7 +1,11 @@
 Command
   Opcode  0x22  SET_CONFIGURATION
-  Address  0x0020
+  Address  0x0020  Channel 1 Capabilities and Configurations
   Data  0x00070001
+    Operating Maximum Virtual Wire Count  7  resolves to 8
+    Maximum Virtual Wire Count Supported  0  resolves to 1
+    Virtual Wire Channel Ready  0
+    Virtual Wire Channel Enable  1
   CRC  0x01  ok
 TAR  2 clocks
 Response

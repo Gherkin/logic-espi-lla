@@ -12,6 +12,7 @@
 // The test cannot reach src/core/tables/ (R3), so the field names below were
 // typed from the rendered spec pages, not lifted from the headers they check.
 
+#include "espi/ConfigRegisters.h"
 #include "espi/Decode.h"
 #include "espi/LinkDecoder.h"
 #include "espi/PacketShape.h"
@@ -133,6 +134,21 @@ void TestCaptureTransactions()
     CheckAgainstExpected( "get_configuration.espi", "get_configuration.expected", true );
     CheckAgainstExpected( "set_configuration.espi", "set_configuration.expected", true );
     CheckAgainstExpected( "get_vwire.espi", "get_vwire.expected", true );
+    CheckAgainstExpected( "config_oob_channel.espi", "config_oob_channel.expected", true );
+}
+
+// Offset 08h decides how the bus itself is read -- I/O mode and CRC enable --
+// and is the widest register in the map, so it is the one that exercises every
+// field kind. The capture never touches it, hence a hand-built fixture.
+void TestGeneralCapabilities()
+{
+    CheckAgainstExpected( "config_general.espi", "config_general.expected", true );
+
+    // Both virtual wire count fields at 3Fh. The capture only ever shows 0 and
+    // 7, which fit in three bits, so a field declared one bit too narrow
+    // decoded every real transaction correctly. The mutation runner found that
+    // gap; this fixture closes it.
+    CheckAgainstExpected( "config_vwire_max.espi", "config_vwire_max.expected", true );
 }
 
 // The response modifier decides how many bytes the response phase holds, so a
@@ -228,6 +244,60 @@ void TestUntranscribedShapesAreGaps()
     }
 }
 
+// Table 21, p.93, typed from the rendered page. An address the map does not
+// define, or one whose layout has not been transcribed, must not resolve --
+// otherwise the decoder names bits in a register nobody has read.
+void TestConfigRegisterGaps()
+{
+    struct Expect
+    {
+        uint16_t address;
+        const char* name;
+    };
+    const Expect known[] = {
+        { 0x0004, "Device Identification" },
+        { 0x0008, "General Capabilities and Configurations" },
+        { 0x0010, "Channel 0 Capabilities and Configurations" },
+        { 0x0020, "Channel 1 Capabilities and Configurations" },
+        { 0x0030, "Channel 2 Capabilities and Configurations" },
+        { 0x0040, "Channel 3 Capabilities and Configurations" },
+    };
+    for( const Expect& e : known )
+    {
+        const char* name = nullptr;
+        if( !LookupConfigRegister( e.address, &name ) )
+        {
+            std::fprintf( stderr, "FAIL  register 0x%04X not recognised\n", e.address );
+            TEST_CHECK( false );
+            continue;
+        }
+        TEST_CHECK( std::string( name ) == e.name );
+    }
+
+    const uint16_t gaps[] = {
+        0x0000, // Reserved, Table 21
+        0x000C, // Reserved
+        0x0014, // Reserved
+        0x0044, // Channel 3 Capabilities 2 -- real, not transcribed yet
+        0x0048, // Channel 3 Capabilities 3 -- real, not transcribed yet
+        0x004C, // Channel 3 Capabilities 4 -- real, not transcribed yet
+        0x0050, // Reserved
+        0x0800, // Platform specific
+    };
+    for( uint16_t address : gaps )
+    {
+        if( LookupConfigRegister( address, nullptr ) )
+            std::fprintf( stderr, "FAIL  address 0x%04X resolved to a layout nobody transcribed\n", address );
+        TEST_CHECK( !LookupConfigRegister( address, nullptr ) );
+    }
+
+    // Only the low 12 bits are decoded (§3.7, p.37), so the high nibble of the
+    // address must not change which register is found.
+    const char* masked = nullptr;
+    TEST_CHECK( LookupConfigRegister( 0xF020, &masked ) );
+    TEST_CHECK( std::string( masked ) == "Channel 1 Capabilities and Configurations" );
+}
+
 // Table 3, p.30, typed from the rendered page.
 void TestResponseEncodings()
 {
@@ -317,6 +387,8 @@ void TestStatusBits()
 int main()
 {
     TestCaptureTransactions();
+    TestGeneralCapabilities();
+    TestConfigRegisterGaps();
     TestResponseModifierAppend();
     TestWaitState();
     TestMalformed();

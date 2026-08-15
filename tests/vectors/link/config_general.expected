@@ -1,0 +1,31 @@
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0008  General Capabilities and Configurations
+  CRC  0x10  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x8734000F
+    CRC Checking Enable  1
+    Response Modifier Enable  0
+    RTC-Integrated-BMC  0
+    Alert Mode  0
+    I/O Mode Select  0x1  Dual I/O
+    I/O Mode Support  0x3  Single, Dual and Quad I/O
+    Open Drain Alert# Select  0
+    Operating Frequency  0x3  50 MHz
+    Open Drain Alert# Supported  0
+    Maximum Frequency Supported  0x4  66 MHz
+    Maximum WAIT STATE Allowed  0x0  16 byte times
+    Channel Supported  0x0F
+      Peripheral Channel  bit 0 = 1
+      Virtual Wire Channel  bit 1 = 1
+      OOB Message Channel  bit 2 = 1
+      Flash Access Channel  bit 3 = 1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x52  ok

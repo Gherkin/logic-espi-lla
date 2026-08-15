@@ -1,5 +1,6 @@
 #include "espi/LinkDecoder.h"
 
+#include "espi/ConfigRegisters.h"
 #include "espi/Crc8.h"
 #include "espi/Opcodes.h"
 #include "espi/PacketShape.h"
@@ -148,6 +149,81 @@ void AddStatusChildren( Field* status, uint16_t value )
     }
 }
 
+// Which configuration register a packet is talking about. GET_CONFIGURATION
+// puts the address in the command phase and the data in the response, so this
+// has to survive the turn-around.
+struct ConfigContext
+{
+    bool have_address = false;
+    uint16_t address = 0;
+};
+
+void AddChannelSupportChildren( Field* parent, uint32_t value )
+{
+    for( size_t i = 0; i < ChannelSupportCount(); ++i )
+    {
+        const ChannelSupportBit& c = ChannelSupportAt( i );
+        if( ( value >> c.bit ) & 1u )
+        {
+            char text[ 32 ];
+            std::snprintf( text, sizeof( text ), "bit %u = 1", static_cast<unsigned>( c.bit ) );
+            parent->Add( Field( c.name, text, 1, 1, parent->span ) );
+        }
+    }
+
+    const uint32_t platform = value & ChannelSupportPlatformMask();
+    if( platform != 0 )
+        parent->Add( Field( "Platform specific channels", Hex( platform, 2 ), platform, 8, parent->span ) );
+}
+
+// Resolve a configuration DWord into named fields.
+void AddConfigChildren( Field* data, uint16_t address, uint32_t value )
+{
+    const char* register_name = nullptr;
+    if( !LookupConfigRegister( address, &register_name ) )
+    {
+        Field gap( "Register Layout", "no layout transcribed for address " + Hex( address & 0x0FFF, 3 ), address, 16, data->span );
+        gap.severity = Severity::Warning;
+        data->Add( std::move( gap ) );
+        return;
+    }
+
+    ConfigField fields[ 16 ];
+    const size_t count = DecodeConfigRegister( address, value, fields, 16 );
+    for( size_t i = 0; i < count && i < 16; ++i )
+    {
+        const ConfigField& f = fields[ i ];
+
+        if( f.reserved )
+        {
+            // The specification requires reserved spans to read as zero, so a
+            // nonzero one is worth saying out loud and a zero one is noise.
+            if( f.value != 0 )
+            {
+                Field r( "Reserved", Hex( f.value, 1 ) + "  must be driven to 0", f.value, 32, data->span );
+                r.severity = Severity::Warning;
+                data->Add( std::move( r ) );
+            }
+            continue;
+        }
+
+        std::string text;
+        if( f.meaning != nullptr )
+            text = Hex( f.value, 1 ) + "  " + f.meaning;
+        else if( f.zero_based )
+            text = std::to_string( f.value ) + "  resolves to " + std::to_string( f.value + 1 );
+        else if( f.high == f.low )
+            text = std::to_string( f.value );
+        else
+            text = Hex( f.value, 2 );
+
+        Field field( f.name, text, f.value, static_cast<uint8_t>( f.high - f.low + 1 ), data->span );
+        if( IsChannelSupportedField( address, f ) )
+            AddChannelSupportChildren( &field, f.value );
+        data->Add( std::move( field ) );
+    }
+}
+
 // A virtual wire packet: a count byte followed by 2 * (count + 1) bytes of
 // index/data pairs. Section 4.2.2, p.57 -- the count is 0 based and its top
 // two bits are reserved.
@@ -183,7 +259,7 @@ bool ReadVwirePacket( PhaseReader* reader, Field* parent )
 }
 
 // Walk one phase's elements. Returns false if the source ran out mid-packet.
-bool ReadElements( PhaseReader* reader, const ElementList& list, Field* parent )
+bool ReadElements( PhaseReader* reader, const ElementList& list, Field* parent, ConfigContext* config )
 {
     for( uint8_t i = 0; i < list.count; ++i )
     {
@@ -204,9 +280,27 @@ bool ReadElements( PhaseReader* reader, const ElementList& list, Field* parent )
             return false;
 
         const int digits = static_cast<int>( size ) * 2;
-        Field field( ElementName( element ), Hex( value, digits ), value, static_cast<uint8_t>( size * 8 ), span );
+        std::string text = Hex( value, digits );
+
+        // Addr16 only ever appears in GET_CONFIGURATION and SET_CONFIGURATION,
+        // so naming the register here also tells the Data32 that follows --
+        // possibly in the other phase -- what it is looking at.
+        if( element == Element::Addr16 )
+        {
+            config->have_address = true;
+            config->address = static_cast<uint16_t>( value );
+            const char* register_name = nullptr;
+            if( LookupConfigRegister( config->address, &register_name ) )
+                text += std::string( "  " ) + register_name;
+        }
+
+        Field field( ElementName( element ), text, value, static_cast<uint8_t>( size * 8 ), span );
+
         if( element == Element::Status16 )
             AddStatusChildren( &field, static_cast<uint16_t>( value ) );
+        else if( element == Element::Data32 && config->have_address )
+            AddConfigChildren( &field, config->address, static_cast<uint32_t>( value ) );
+
         parent->Add( std::move( field ) );
     }
     return true;
@@ -224,6 +318,7 @@ bool LinkDecoder::Decode( Transaction* out )
         return false;
 
     Transaction txn;
+    ConfigContext config;
 
     // ----------------------------------------------------------------- command
     PhaseReader cmd( mSource, Phase::Command );
@@ -263,7 +358,7 @@ bool LinkDecoder::Decode( Transaction* out )
         return true;
     }
 
-    if( !ReadElements( &cmd, shape.command, &command ) )
+    if( !ReadElements( &cmd, shape.command, &command, &config ) )
     {
         txn.truncated = true;
         txn.fields.push_back( std::move( command ) );
@@ -387,7 +482,7 @@ bool LinkDecoder::Decode( Transaction* out )
         return true;
     }
 
-    if( !ReadElements( &rsp, response_elements, &response ) )
+    if( !ReadElements( &rsp, response_elements, &response, &config ) )
     {
         txn.truncated = true;
         txn.fields.push_back( std::move( response ) );

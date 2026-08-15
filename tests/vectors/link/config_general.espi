@@ -1,0 +1,29 @@
+# GET_CONFIGURATION of offset 0008h, General Capabilities and Configurations.
+#
+# HAND BUILT FROM THE SPECIFICATION, NOT FROM THE CAPTURE. espi_dump.txt only
+# ever addresses 0020h and 0030h, so nothing independent confirms these bytes.
+#
+# It exists because 0008h is the register that changes how the bus itself is
+# decoded -- I/O Mode Select and CRC Checking Enable both live here, and both
+# take effect at the deassertion edge of Chip Select# (§6.2 p.92, p.95). It is
+# also the widest register, so it exercises every kind of field the table can
+# describe: enumerated values, a wrap-around count, and a bit field.
+#
+# The DWord 8734000Fh was chosen so no two adjacent fields share a value:
+#
+#   bit 31      CRC Checking Enable            1
+#   bit 30      Response Modifier Enable       0
+#   bits 27:26  I/O Mode Select                01b   Dual I/O
+#   bits 25:24  I/O Mode Support               11b   Single, Dual and Quad
+#   bits 22:20  Operating Frequency            011b  50 MHz
+#   bits 18:16  Maximum Frequency Supported    100b  66 MHz
+#   bits 15:12  Maximum WAIT STATE Allowed     0h    16 byte times, not zero
+#   bits 7:0    Channel Supported              0Fh   all four channels
+#
+# On the wire the DWord goes least significant byte first: 0F 00 34 87.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4): 10h over {21 00 08},
+# 52h over {08 0F 00 34 87 0F 01}.
+CMD 21 00 08 10
+TAR
+RSP 08 0F 00 34 87 0F 01 52

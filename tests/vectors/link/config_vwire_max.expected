@@ -5,15 +5,15 @@ Command
 TAR  2 clocks
 Response
   Response  0x08  ACCEPT
-  Data  0x00000B00
-    Operating Maximum Virtual Wire Count  0  resolves to 1
-    Maximum Virtual Wire Count Supported  11  resolves to 12
-    Virtual Wire Channel Ready  0
-    Virtual Wire Channel Enable  0
+  Data  0x003F3F03
+    Operating Maximum Virtual Wire Count  63  resolves to 64
+    Maximum Virtual Wire Count Supported  63  resolves to 64
+    Virtual Wire Channel Ready  1
+    Virtual Wire Channel Enable  1
   Status  0x010F
     PC_FREE  bit 0 = 1
     NP_FREE  bit 1 = 1
     VWIRE_FREE  bit 2 = 1
     OOB_FREE  bit 3 = 1
     FLASH_C_FREE  bit 8 = 1
-  CRC  0x91  ok
+  CRC  0x48  ok

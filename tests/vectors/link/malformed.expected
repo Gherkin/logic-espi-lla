@@ -7,12 +7,16 @@ Command
 ---
 Command
   Opcode  0x21  GET_CONFIGURATION
-  Address  0x0020
+  Address  0x0020  Channel 1 Capabilities and Configurations
   CRC  0xC9  BAD, computed 0xC8 [ERROR]
 TAR  2 clocks
 Response
   Response  0x08  ACCEPT
   Data  0x00000B00
+    Operating Maximum Virtual Wire Count  0  resolves to 1
+    Maximum Virtual Wire Count Supported  11  resolves to 12
+    Virtual Wire Channel Ready  0
+    Virtual Wire Channel Enable  0
   Status  0x010F
     PC_FREE  bit 0 = 1
     NP_FREE  bit 1 = 1

@@ -33,6 +33,7 @@ add_library(espi_core STATIC
     src/core/src/Responses.cpp
     src/core/src/Status.cpp
     src/core/src/PacketShapes.cpp
+    src/core/src/ConfigRegisters.cpp
     src/core/src/LinkDecoder.cpp
 )
 

@@ -22,6 +22,12 @@ std::vector<TransactionSummary>& Records()
 
 } // namespace
 
+// Nothing to enable offline: there is no Logic 2 to tell, and testlib defines
+// no Analyzer::UseFrameV2 to call even if there were.
+void EnableFrameV2( Analyzer* /*analyzer*/ )
+{
+}
+
 void EmitTransactionV2( AnalyzerResults* /*results*/, const TransactionSummary& summary )
 {
     Records().push_back( summary );

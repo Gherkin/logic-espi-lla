@@ -8,10 +8,17 @@
 
 #include "FrameV2Sink.h"
 
+#include <Analyzer.h>
 #include <AnalyzerResults.h>
 
 namespace espi_saleae
 {
+
+void EnableFrameV2( Analyzer* analyzer )
+{
+    if( analyzer != nullptr )
+        analyzer->UseFrameV2();
+}
 
 void EmitTransactionV2( AnalyzerResults* results, const TransactionSummary& summary )
 {

@@ -5,6 +5,7 @@
 
 #include <string>
 
+class Analyzer;
 class AnalyzerResults;
 
 namespace espi_saleae
@@ -47,6 +48,20 @@ struct TransactionSummary
     bool truncated = false;
     bool error = false;
 };
+
+// Declare that this analyzer produces FrameV2 results.
+//
+// Analyzer.h line 42: "call this function if your analyzer produces FrameV2
+// results". Without it AddFrameV2 output does not surface in Logic 2 at all,
+// so the records below would be emitted and silently dropped.
+//
+// It has to come through this seam rather than being called directly. The
+// declaration is NOT guarded by LOGIC2 -- so it compiles anywhere -- but
+// testlib defines no Analyzer::UseFrameV2, so a direct call from any shared
+// shell source would leave the test binary with an undefined symbol. That is
+// the trap this seam exists to avoid, in the one shape where the header gives
+// no warning.
+void EnableFrameV2( Analyzer* analyzer );
 
 void EmitTransactionV2( AnalyzerResults* results, const TransactionSummary& summary );
 

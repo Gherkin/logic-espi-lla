@@ -79,6 +79,11 @@ void EspiAnalyzer::SetupResults()
     mResults.reset( new EspiAnalyzerResults() );
     SetAnalyzerResults( mResults.get() );
 
+    // Without this the FrameV2 records below are emitted and dropped on the
+    // floor by Logic 2. It goes through the sink seam because testlib has no
+    // definition of it -- see FrameV2Sink.h.
+    EnableFrameV2( this );
+
     // Bubbles land on the lanes, which is where the bytes are.
     for( int i = 0; i < 4; ++i )
     {

@@ -7,8 +7,10 @@ Response
     Modifier  Virtual Wire (channel 1) packet appended
   Virtual Wire Packet  1 group
     Count  0x00  1 group
-    Index  0x05
+    Index  0x05  System Event, target to controller
     Data  0x88
+      TARGET_BOOT_LOAD_STATUS  bit 3 = 1  high
+      Masked  ERROR_NONFATAL, ERROR_FATAL, TARGET_BOOT_LOAD_DONE  valid bit clear, level not updated
   Status  0x010F
     PC_FREE  bit 0 = 1
     NP_FREE  bit 1 = 1

@@ -1,0 +1,16 @@
+# GET_VWIRE where the valid bits do not cover every level bit that is set.
+#
+# Transcribed byte for byte from tests/vectors/espi_dump.txt, lines 265-275.
+#
+# Index 05h, data 19h. The valid nibble is 0001b, so only bit[0] --
+# TARGET_BOOT_LOAD_DONE -- carries a state in this packet. Bit[3] is also set,
+# but its valid bit is clear, so it is a stale echo of the previous value and
+# not a wire state (Table 8, p.61: "the corresponding virtual wire must retain
+# its previous value and it must not be updated for this virtual wire packet").
+#
+# This is the case a decoder gets wrong by reading the level nibble on its own,
+# and it is here because real hardware produced it rather than because someone
+# thought to construct it.
+CMD 05 1B
+TAR
+RSP 08 00 05 19 0F 01 5D

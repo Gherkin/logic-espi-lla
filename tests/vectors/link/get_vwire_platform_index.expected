@@ -1,0 +1,37 @@
+Command
+  Opcode  0x05  GET_VWIRE
+  CRC  0x1B  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Virtual Wire Packet  1 group
+    Count  0x00  1 group
+    Index  0x40  Platform specific
+    Data  0x11
+      Virtual Wire Layout  Platform specific -- the base specification defines no wires for this index [!]
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xD9  ok
+---
+Command
+  Opcode  0x05  GET_VWIRE
+  CRC  0x1B  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Virtual Wire Packet  1 group
+    Count  0x00  1 group
+    Index  0x40  Platform specific
+    Data  0x10
+      Virtual Wire Layout  Platform specific -- the base specification defines no wires for this index [!]
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xB2  ok

@@ -1,0 +1,34 @@
+Command
+  Opcode  0x05  GET_VWIRE
+  CRC  0x1B  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Virtual Wire Packet  4 groups
+    Count  0x03  4 groups
+    Index  0x04  System Event, target to controller
+    Data  0xD4
+      PME#  bit 3 = 0  low, asserted
+      WAKE#  bit 2 = 1  high, deasserted
+      OOB_RST_ACK  bit 0 = 0  low, deasserted
+    Index  0x06  System Event, target to controller
+    Data  0xF6
+      HOST_RST_ACK  bit 3 = 0  low, deasserted
+      RCIN#  bit 2 = 1  high, deasserted
+      SMI#  bit 1 = 1  high, deasserted
+      SCI#  bit 0 = 0  low, asserted
+    Index  0x00  Interrupt event, target to controller
+    Data  0x82
+      Interrupt Level  bit 7 = 1  asserted
+      Interrupt Line  0x02  IRQ 2
+    Index  0x01  Interrupt event, target to controller
+    Data  0x03
+      Interrupt Level  bit 7 = 0  deasserted
+      Interrupt Line  0x03  IRQ 131
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x0F  ok

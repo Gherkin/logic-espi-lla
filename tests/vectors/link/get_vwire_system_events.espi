@@ -1,0 +1,28 @@
+# GET_VWIRE carrying target-to-controller groups in both data formats.
+#
+# HAND BUILT FROM THE SPECIFICATION, NOT FROM THE CAPTURE. The capture only
+# ever answers GET_VWIRE with a single group at index 05h or 40h, so nothing
+# independent confirms these bytes.
+#
+# Four groups, count byte 03h. Indices 4 and 6 are the System Event indices
+# Tables 11 and 13 mark Target to Controller; indices 0 and 1 are Interrupt
+# events, which p.60 says are "defined from target to controller only".
+#
+#   04h data D4h -- PME# asserted (active low), WAKE# released, OOB_RST_ACK
+#                   released (active high). Bit 1 is RSV and its valid bit 5
+#                   is clear.
+#   06h data F6h -- every valid bit set, so all four wires carry a state. SCI#
+#                   asserted, the rest released.
+#   00h data 82h -- NOT a valid/level byte. Bit 7 is the interrupt level and
+#                   bits 6:0 are the line, so this is IRQ 2 asserting. Decoded
+#                   as valid/level it would come out as two plausible wires.
+#   01h data 03h -- the same layout in the second bank: index 1 covers IRQ 128
+#                   to 255, so line 03h is IRQ 131, and it is deasserting.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4): 1Bh over {05}, 0Fh over the
+# response. That response CRC is 0Fh by arithmetic, which is also the
+# WAIT_STATE encoding -- it is read as a CRC because of where it sits, and a
+# decoder that scanned for 0Fh anywhere in the phase would break here.
+CMD 05 1B
+TAR
+RSP 08 03 04 D4 06 F6 00 82 01 03 0F 01 0F

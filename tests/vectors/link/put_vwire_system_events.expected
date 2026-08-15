@@ -1,0 +1,30 @@
+Command
+  Opcode  0x04  PUT_VWIRE
+  Virtual Wire Packet  3 groups
+    Count  0x02  3 groups
+    Index  0x02  System Event, controller to target
+    Data  0x73
+      SLP_S5#  bit 2 = 0  low, asserted
+      SLP_S4#  bit 1 = 1  high, deasserted
+      SLP_S3#  bit 0 = 1  high, deasserted
+    Index  0x03  System Event, controller to target
+    Data  0x62
+      OOB_RST_WARN  bit 2 = 0  low, deasserted
+      PLTRST#  bit 1 = 1  high, deasserted
+      Masked  SUS_STAT#  valid bit clear, level not updated
+    Index  0x07  System Event, controller to target
+    Data  0x51
+      NMIOUT#  bit 2 = 0  low, asserted
+      HOST_RST_WARN  bit 0 = 1  high, asserted
+      Masked  SMIOUT#  valid bit clear, level not updated
+  CRC  0x6D  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok

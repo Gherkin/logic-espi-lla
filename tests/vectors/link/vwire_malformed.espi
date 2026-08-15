@@ -1,0 +1,29 @@
+# Virtual wire packets that are legal to put on a bus and wrong.
+#
+# HAND BUILT FROM THE SPECIFICATION, NOT FROM THE CAPTURE. The capture is a
+# clean link coming up and contains none of this.
+#
+# Every byte here decodes without stopping the transaction -- that is what
+# makes them worth a fixture. Each is a place where masking the bad bits away
+# would produce a confident, readable, wrong decode.
+#
+#   count C2h  -- bits [7:6] are Reserved (section 4.2.2, p.57). The count is
+#                 still 02h, so three groups follow and the packet length is
+#                 unaffected. Only the analyzer will ever mention this.
+#   index 0Ah  -- inside 8h-3Fh, which Table 8 p.61 marks Reserved. There is no
+#                 data format to apply, so 00h stays an unexplained byte and
+#                 says so.
+#   index 80h  -- General Purpose I/O Expander (Table 8, p.62). The valid/level
+#                 format is defined but the wires are not named anywhere, so
+#                 the bits resolve and the names do not. 39h has bits 3 and 0
+#                 set in the level nibble but only bits 1 and 0 valid.
+#   index 02h  -- 88h sets bit 3, which Table 9 p.63 marks RSV, together with
+#                 its valid bit 7, which the same table marks Reserved. Every
+#                 named wire in the group is masked, so the one thing this
+#                 packet communicates is a reserved bit that should be zero.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4): 1Bh over {05}, 58h over the
+# response.
+CMD 05 1B
+TAR
+RSP 08 C2 0A 00 80 39 02 88 0F 01 58

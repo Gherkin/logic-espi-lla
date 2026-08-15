@@ -6,6 +6,7 @@
 #include "espi/PacketShape.h"
 #include "espi/Responses.h"
 #include "espi/Status.h"
+#include "espi/VirtualWires.h"
 
 #include <cstdio>
 #include <string>
@@ -274,6 +275,199 @@ void AddConfigChildren( Field* data, uint16_t address, uint32_t value )
     }
 }
 
+// --- virtual wires -------------------------------------------------------
+
+const char* DirectionText( VwireDirection direction )
+{
+    switch( direction )
+    {
+    case VwireDirection::ControllerToTarget:
+        return "controller to target";
+    case VwireDirection::TargetToController:
+        return "target to controller";
+    case VwireDirection::Configurable:
+        // The pins are on the target either way (section 4.2.2.5, p.72); which
+        // way the messages travel depends on whether this index was set up as
+        // inputs or outputs, and that never appears on the bus.
+        return "direction configured per index";
+    case VwireDirection::Unspecified:
+        break;
+    }
+    return nullptr;
+}
+
+// A level bit read against the wire's polarity. This is the whole point of
+// carrying the Polarity column: SLP_S3# at level '0' is S3 sleep being
+// requested, and rendering that as "low" leaves the reader to invert it by
+// hand against the page the decoder is supposed to replace.
+//
+// TARGET_BOOT_LOAD_STATUS is the one wire with no assert/release sense -- its
+// cell says "Polarity: As defined above" because '0' and '1' mean a corrupted
+// and an intact boot image. It gets the level and no claim about assertion.
+std::string LevelText( unsigned level, VwirePolarity polarity )
+{
+    const char* state = level != 0 ? "high" : "low";
+    switch( polarity )
+    {
+    case VwirePolarity::ActiveHigh:
+        return std::string( state ) + ( level != 0 ? ", asserted" : ", deasserted" );
+    case VwirePolarity::ActiveLow:
+        return std::string( state ) + ( level == 0 ? ", asserted" : ", deasserted" );
+    case VwirePolarity::AsDefined:
+    case VwirePolarity::None:
+        break;
+    }
+    return state;
+}
+
+std::string BitText( unsigned bit, unsigned value )
+{
+    char buf[ 32 ];
+    std::snprintf( buf, sizeof( buf ), "bit %u = %u", bit, value );
+    return buf;
+}
+
+// Interrupt event, Table 8 p.60: bit 7 is the level, bits 6:0 the IRQ line,
+// and the index picks the bank of 128 the line falls in.
+void AddInterruptChildren( Field* data, uint8_t index, uint8_t value )
+{
+    const unsigned level = ( value >> VwireIrqLevelBit() ) & 1u;
+    data->Add( Field( "Interrupt Level", BitText( VwireIrqLevelBit(), level ) + ( level != 0 ? "  asserted" : "  deasserted" ),
+                      level, 1, data->span ) );
+
+    const unsigned irq = VwireIrqNumber( index, value );
+    data->Add( Field( "Interrupt Line", Hex( value & 0x7Fu, 2 ) + "  IRQ " + std::to_string( irq ), value & 0x7Fu, 7,
+                      data->span ) );
+}
+
+// A valid/level byte whose wire names are transcribed -- the System Event
+// indices, Tables 9-14.
+void AddNamedWireChildren( Field* data, uint8_t index, uint8_t value )
+{
+    VwireBit wires[ 8 ];
+    const size_t count = VwireBitsForIndex( index, wires, 8 );
+
+    uint8_t reserved_mask = 0;
+    std::string masked;
+
+    for( size_t i = 0; i < count && i < 8; ++i )
+    {
+        const VwireBit& w = wires[ i ];
+        const unsigned level = ( value >> w.level_bit ) & 1u;
+        const bool valid = ( ( value >> w.valid_bit ) & 1u ) != 0;
+
+        if( w.reserved )
+        {
+            reserved_mask |= static_cast<uint8_t>( ( 1u << w.level_bit ) | ( 1u << w.valid_bit ) );
+            continue;
+        }
+
+        if( !valid )
+        {
+            // A clear valid bit is a mask, not an absence: the wire keeps its
+            // previous value and the level bit here is a stale echo. Naming
+            // the wire without its level is the honest rendering.
+            if( !masked.empty() )
+                masked += ", ";
+            masked += w.name;
+            continue;
+        }
+
+        data->Add( Field( w.name, BitText( w.level_bit, level ) + "  " + LevelText( level, w.polarity ), level, 1, data->span ) );
+    }
+
+    if( !masked.empty() )
+        data->Add( Field( "Masked", masked + "  valid bit clear, level not updated", 0, 8, data->span ) );
+
+    const uint8_t reserved = static_cast<uint8_t>( value & reserved_mask );
+    if( reserved != 0 )
+    {
+        Field f( "Reserved", Hex( reserved, 2 ) + "  must be driven to 0", reserved, 8, data->span );
+        f.severity = Severity::Warning;
+        data->Add( std::move( f ) );
+    }
+}
+
+// A valid/level byte in a range that has the format but no transcribed names
+// -- the General Purpose I/O Expander indices. The bits are resolved as far as
+// the specification goes and no further: it says only that each level bit is
+// "the state of a virtual GPIO to be communicated", never which GPIO.
+void AddUnnamedWireChildren( Field* data, uint8_t value )
+{
+    std::string masked;
+    const uint8_t level_mask = VwireLevelMask();
+    for( int bit = 7; bit >= 0; --bit )
+    {
+        const unsigned level_bit = static_cast<unsigned>( bit );
+        if( ( ( level_mask >> level_bit ) & 1u ) == 0 )
+            continue;
+
+        const unsigned level = ( value >> level_bit ) & 1u;
+        if( ( ( value >> VwireValidBitFor( static_cast<uint8_t>( level_bit ) ) ) & 1u ) == 0 )
+        {
+            if( !masked.empty() )
+                masked += ", ";
+            masked += "bit " + std::to_string( level_bit );
+            continue;
+        }
+        data->Add( Field( "Level[" + std::to_string( level_bit ) + "]", BitText( level_bit, level ) + "  " + LevelText( level, VwirePolarity::None ),
+                          level, 1, data->span ) );
+    }
+
+    if( !masked.empty() )
+        data->Add( Field( "Masked", masked + "  valid bit clear, level not updated", 0, 8, data->span ) );
+}
+
+// Resolve one index/data pair into named wires, or say why it cannot be.
+void AddVwireGroup( Field* packet, uint8_t index, ByteSpan index_span, uint8_t data, ByteSpan data_span )
+{
+    VwireIndexInfo info;
+    const bool has_format = LookupVwireIndex( index, &info );
+
+    std::string index_text = Hex( index, 2 );
+    if( info.group != nullptr )
+    {
+        index_text += std::string( "  " ) + info.group;
+        if( const char* direction = DirectionText( info.direction ) )
+            index_text += std::string( ", " ) + direction;
+    }
+
+    Field index_field( "Index", index_text, index, 8, index_span );
+    // 8h-3Fh is Reserved in Table 8, so an index in that range should not be
+    // on the bus at all. 40h-7Fh is platform specific, which is legal traffic
+    // this document simply does not define -- a gap, not a fault.
+    if( info.group != nullptr && std::string( info.group ) == "Reserved" )
+        index_field.severity = Severity::Warning;
+    packet->Add( std::move( index_field ) );
+
+    Field data_field( "Data", Hex( data, 2 ), data, 8, data_span );
+
+    if( !has_format )
+    {
+        Field gap( "Virtual Wire Layout",
+                   info.group != nullptr
+                       ? std::string( info.group ) + " -- the base specification defines no wires for this index"
+                       : std::string( "index falls outside every range of Table 8" ),
+                   index, 8, data_span );
+        gap.severity = Severity::Warning;
+        data_field.Add( std::move( gap ) );
+    }
+    else if( info.format == VwireFormat::Interrupt )
+    {
+        AddInterruptChildren( &data_field, index, data );
+    }
+    else if( info.named_wires )
+    {
+        AddNamedWireChildren( &data_field, index, data );
+    }
+    else
+    {
+        AddUnnamedWireChildren( &data_field, data );
+    }
+
+    packet->Add( std::move( data_field ) );
+}
+
 // A virtual wire packet: a count byte followed by 2 * (count + 1) bytes of
 // index/data pairs. Section 4.2.2, p.57 -- the count is 0 based and its top
 // two bits are reserved.
@@ -284,10 +478,18 @@ bool ReadVwirePacket( PhaseReader* reader, Field* parent )
     if( !reader->Read( &count_byte, &count_span ) )
         return false;
 
-    const unsigned groups = static_cast<unsigned>( count_byte & 0x3F ) + 1u;
+    const unsigned groups = VwireGroupCount( count_byte );
 
     Field packet( "Virtual Wire Packet", Plural( groups, "group" ), count_byte, 8, count_span );
     packet.Add( Field( "Count", Hex( count_byte, 2 ) + "  " + Plural( groups, "group" ), count_byte, 8, count_span ) );
+
+    const uint8_t count_reserved = VwireCountReservedBits( count_byte );
+    if( count_reserved != 0 )
+    {
+        Field f( "Reserved", Hex( count_reserved, 2 ) + "  count bits [7:6] must be driven to 0", count_reserved, 8, count_span );
+        f.severity = Severity::Warning;
+        packet.Add( std::move( f ) );
+    }
 
     for( unsigned g = 0; g < groups; ++g )
     {
@@ -300,8 +502,7 @@ bool ReadVwirePacket( PhaseReader* reader, Field* parent )
             parent->Add( std::move( packet ) );
             return false;
         }
-        packet.Add( Field( "Index", Hex( index, 2 ), index, 8, index_span ) );
-        packet.Add( Field( "Data", Hex( data, 2 ), data, 8, data_span ) );
+        AddVwireGroup( &packet, index, index_span, data, data_span );
     }
 
     parent->Add( std::move( packet ) );

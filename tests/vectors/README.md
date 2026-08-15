@@ -26,9 +26,17 @@ independently from the opcode and the packet shape table. They are compared,
 so the split is a check on the decoder's length arithmetic and never a hint to
 it. `tests/support/FixtureByteSource.h` deliberately knows no protocol.
 
-**Three of these came off real hardware** — `get_configuration`,
-`set_configuration` and `get_vwire` are transcribed from `espi_dump.txt` with
-the source line numbers recorded in each file.
+**Five of these came off real hardware** — `get_configuration`,
+`set_configuration`, `get_vwire`, `get_vwire_boot_done` and
+`get_vwire_platform_index` are transcribed from `espi_dump.txt` with the source
+line numbers recorded in each file. `config_oob_channel` is a second
+`set_configuration` from the same capture.
+
+Two of those are worth more than the rest, because nobody would have thought to
+construct them. `get_vwire_boot_done` has a level bit set underneath a clear
+valid bit — a stale echo, not a wire state. `get_vwire_platform_index` answers
+at index 40h, which the base specification leaves to a document this repository
+does not have; it is the one case where the right decode is to stop.
 
 **The rest are hand built and say so in their own headers.** The capture is a
 clean link coming up: it contains no wait states, no `GET_STATUS`, and nothing

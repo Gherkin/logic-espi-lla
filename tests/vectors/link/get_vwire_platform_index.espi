@@ -1,0 +1,21 @@
+# GET_VWIRE answered at an index the base specification does not define.
+#
+# Transcribed byte for byte from tests/vectors/espi_dump.txt, lines 458-468 and
+# 651-661 -- two exchanges roughly a tenth of a millisecond apart, with the
+# data byte changing from 11h to 10h.
+#
+# Index 40h is 64, the first index of the "Platform specific" range (Table 8,
+# p.61), which p.62 places "in the respective platform specific documents and
+# outside the scope of the specification". The Compatibility specification is
+# where these would be named and it is not available, so the decoder must
+# report the range and stop rather than decode 11h as a valid/level byte.
+#
+# It would be very easy to decode this as four virtual wires. It would also be
+# wrong, and nothing on the bus would say so.
+CMD 05 1B
+TAR
+RSP 08 00 40 11 0F 01 D9
+
+CMD 05 1B
+TAR
+RSP 08 00 40 10 0F 01 B2

@@ -400,6 +400,189 @@
       "find": "X( 0x030, 10, 8, \"OOB Message Channel Maximum Payload Size Selected\", MaxPayload, false, RW, Value, 1 )",
       "replace": "X( 0x030, 6, 4, \"OOB Message Channel Maximum Payload Size Selected\", MaxPayload, false, RW, Value, 1 )",
       "tests": "test_link"
+    },
+
+    {
+      "label": "vwire: System Event range ends one index early",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "X( 2, 7, \"System Event\", ValidLevel, Unspecified,",
+      "replace": "X( 2, 6, \"System Event\", ValidLevel, Unspecified,",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: interrupt indices decoded as valid/level",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "X( 0, 1, \"Interrupt event\", Interrupt, TargetToController,",
+      "replace": "X( 0, 1, \"Interrupt event\", ValidLevel, TargetToController,",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: platform specific range given a data format",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "X( 64, 127, \"Platform specific\", NotDefined, Unspecified,",
+      "replace": "X( 64, 127, \"Platform specific\", ValidLevel, Unspecified,",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: reserved index range given a data format",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "X( 8, 63, \"Reserved\", NotDefined, Unspecified,",
+      "replace": "X( 8, 63, \"Reserved\", ValidLevel, Unspecified,",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: GPIO expander range starts one index late",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "X( 128, 255, \"General Purpose I/O Expander\", ValidLevel, Configurable,",
+      "replace": "X( 129, 255, \"General Purpose I/O Expander\", ValidLevel, Configurable,",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: GPIO expander direction pinned to one direction",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "\"General Purpose I/O Expander\", ValidLevel, Configurable,",
+      "replace": "\"General Purpose I/O Expander\", ValidLevel, ControllerToTarget,",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: GPIO expander programmable reset domain dropped",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "Configurable, \"programmable: eSPI Reset# or Platform Reset\" )",
+      "replace": "Configurable, \"\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: platform specific range given a direction the spec never states",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "X( 64, 127, \"Platform specific\", NotDefined, Unspecified, \"\" )",
+      "replace": "X( 64, 127, \"Platform specific\", NotDefined, Configurable, \"\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: index 4 direction reversed",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "X( 4, \"eSPI Reset#\", TargetToController )",
+      "replace": "X( 4, \"eSPI Reset#\", ControllerToTarget )",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: index 6 reset domain given as eSPI Reset#",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "X( 6, \"PLTRST#\", TargetToController )",
+      "replace": "X( 6, \"eSPI Reset#\", TargetToController )",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: TARGET_BOOT_LOAD_DONE moved off bit 0",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "X( 5, 0, \"TARGET_BOOT_LOAD_DONE\", ActiveHigh, Inactive )",
+      "replace": "X( 5, 1, \"TARGET_BOOT_LOAD_DONE\", ActiveHigh, Inactive )",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: ERROR_NONFATAL and ERROR_FATAL names swapped",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "X( 5, 2, \"ERROR_NONFATAL\", ActiveHigh, Inactive )",
+      "replace": "X( 5, 2, \"ERROR_FATAL\", ActiveHigh, Inactive )",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: TARGET_BOOT_LOAD_STATUS given an assert/release polarity",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "X( 5, 3, \"TARGET_BOOT_LOAD_STATUS\", AsDefined, Zero )",
+      "replace": "X( 5, 3, \"TARGET_BOOT_LOAD_STATUS\", ActiveHigh, Zero )",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: SLP_S5# polarity inverted",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "X( 2, 2, \"SLP_S5#\", ActiveLow, Active )",
+      "replace": "X( 2, 2, \"SLP_S5#\", ActiveHigh, Active )",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: OOB_RST_WARN polarity inverted",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "X( 3, 2, \"OOB_RST_WARN\", ActiveHigh, Inactive )",
+      "replace": "X( 3, 2, \"OOB_RST_WARN\", ActiveLow, Inactive )",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: HOST_RST_WARN polarity inverted",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "X( 7, 0, \"HOST_RST_WARN\", ActiveHigh, Inactive )",
+      "replace": "X( 7, 0, \"HOST_RST_WARN\", ActiveLow, Inactive )",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: SLP_S3# reset state given as Inactive",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "X( 2, 0, \"SLP_S3#\", ActiveLow, Active )",
+      "replace": "X( 2, 0, \"SLP_S3#\", ActiveLow, Inactive )",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: index 4 reserved bit named as a wire",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "X( 4, 1, \"RSV\", None, None )",
+      "replace": "X( 4, 1, \"SUS_ACK#\", ActiveHigh, Inactive )",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: SCI# and SMI# names swapped",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "X( 6, 0, \"SCI#\", ActiveLow, Inactive )",
+      "replace": "X( 6, 0, \"SMI#\", ActiveLow, Inactive )",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: count field one bit too narrow",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "#define ESPI_VWIRE_COUNT_MASK 0x3Fu",
+      "replace": "#define ESPI_VWIRE_COUNT_MASK 0x1Fu",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: count reserved bits [7:6] narrowed to [7]",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "#define ESPI_VWIRE_COUNT_RESERVED_MASK 0xC0u",
+      "replace": "#define ESPI_VWIRE_COUNT_RESERVED_MASK 0x80u",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: valid bit paired three positions above its level bit",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "#define ESPI_VWIRE_VALID_SHIFT 4u",
+      "replace": "#define ESPI_VWIRE_VALID_SHIFT 3u",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: level nibble widened past bits 3:0",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "#define ESPI_VWIRE_LEVEL_MASK 0x0Fu",
+      "replace": "#define ESPI_VWIRE_LEVEL_MASK 0x1Fu",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: interrupt line read as 8 bits rather than 7",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "#define ESPI_VWIRE_IRQ_LINE_MASK 0x7Fu",
+      "replace": "#define ESPI_VWIRE_IRQ_LINE_MASK 0xFFu",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: interrupt index 1 bank at 256 rather than 128",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "#define ESPI_VWIRE_IRQ_BANK 128u",
+      "replace": "#define ESPI_VWIRE_IRQ_BANK 256u",
+      "tests": "test_link"
+    },
+    {
+      "label": "vwire: interrupt level read from bit 6",
+      "file": "src/core/tables/VirtualWires.h",
+      "find": "#define ESPI_VWIRE_IRQ_LEVEL_BIT 7u",
+      "replace": "#define ESPI_VWIRE_IRQ_LEVEL_BIT 6u",
+      "tests": "test_link"
     }
   ]
 }

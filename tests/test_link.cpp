@@ -18,6 +18,7 @@
 #include "espi/PacketShape.h"
 #include "espi/Responses.h"
 #include "espi/Status.h"
+#include "espi/VirtualWires.h"
 #include "support/FixtureByteSource.h"
 #include "support/TestMacros.h"
 
@@ -135,6 +136,13 @@ void TestCaptureTransactions()
     CheckAgainstExpected( "set_configuration.espi", "set_configuration.expected", true );
     CheckAgainstExpected( "get_vwire.espi", "get_vwire.expected", true );
     CheckAgainstExpected( "config_oob_channel.espi", "config_oob_channel.expected", true );
+
+    // Two more virtual wire exchanges off the same capture. The first has a
+    // level bit set under a clear valid bit, the second answers at an index
+    // the base specification leaves to a document we do not have -- neither is
+    // a case anybody would have thought to construct.
+    CheckAgainstExpected( "get_vwire_boot_done.espi", "get_vwire_boot_done.expected", true );
+    CheckAgainstExpected( "get_vwire_platform_index.espi", "get_vwire_platform_index.expected", true );
 }
 
 // Offset 08h decides how the bus itself is read -- I/O mode and CRC enable --
@@ -158,6 +166,16 @@ void TestGeneralCapabilities()
 void TestResponseModifierAppend()
 {
     CheckAgainstExpected( "get_status_vwire_append.espi", "get_status_vwire_append.expected", true );
+}
+
+// The capture only ever carries one virtual wire group, at index 05h or 40h,
+// and never a PUT_VWIRE. These cover the rest of the index space and both data
+// formats, and are hand built from the specification.
+void TestVwirePackets()
+{
+    CheckAgainstExpected( "put_vwire_system_events.espi", "put_vwire_system_events.expected", true );
+    CheckAgainstExpected( "get_vwire_system_events.espi", "get_vwire_system_events.expected", true );
+    CheckAgainstExpected( "vwire_malformed.espi", "vwire_malformed.expected", true );
 }
 
 void TestWaitState()
@@ -622,6 +640,295 @@ void TestStatusBits()
     TEST_CHECK_EQ( StatusReservedMask(), uint16_t( 0xCC00 ) );
 }
 
+// Table 8, pp.60-62, typed from the rendered pages.
+//
+// Every index 0-255 falls in exactly one range, so this walks all of them
+// rather than sampling. A range whose End is one short lets the next range
+// swallow an index, and only the boundary indices would show it.
+void TestVwireIndexRanges()
+{
+    struct Range
+    {
+        unsigned start;
+        unsigned end;
+        const char* group;
+        VwireFormat format;
+    };
+    const Range table[] = {
+        { 0, 1, "Interrupt event", VwireFormat::Interrupt },
+        { 2, 7, "System Event", VwireFormat::ValidLevel },
+        { 8, 63, "Reserved", VwireFormat::NotDefined },
+        { 64, 127, "Platform specific", VwireFormat::NotDefined },
+        { 128, 255, "General Purpose I/O Expander", VwireFormat::ValidLevel },
+    };
+
+    for( const Range& r : table )
+    {
+        for( unsigned i = r.start; i <= r.end; ++i )
+        {
+            VwireIndexInfo info;
+            const bool decoded = LookupVwireIndex( static_cast<uint8_t>( i ), &info );
+
+            if( info.group == nullptr || std::string( info.group ) != r.group )
+            {
+                std::fprintf( stderr, "FAIL  index %u: expected %s got %s\n", i, r.group,
+                              info.group != nullptr ? info.group : "(none)" );
+                TEST_CHECK( false );
+                continue;
+            }
+            TEST_CHECK( info.format == r.format );
+
+            // A range with no data format is an explicit gap: the decoder must
+            // not resolve it, however tempting the byte looks.
+            TEST_CHECK_EQ( decoded, r.format != VwireFormat::NotDefined );
+            TEST_CHECK_EQ( info.start, uint8_t( r.start ) );
+            TEST_CHECK_EQ( info.end, uint8_t( r.end ) );
+
+            // Only the System Event indices have wire names on a page.
+            TEST_CHECK_EQ( info.named_wires, i >= 2 && i <= 7 );
+        }
+    }
+
+    // "Interrupt event virtual wires are defined from target to controller
+    // only", p.60 -- restated by §4.2.2.4 and by the column heading of Table 15
+    // on p.70.
+    VwireIndexInfo info;
+    LookupVwireIndex( 0, &info );
+    TEST_CHECK( info.direction == VwireDirection::TargetToController );
+    LookupVwireIndex( 1, &info );
+    TEST_CHECK( info.direction == VwireDirection::TargetToController );
+
+    // §4.2.2.5, p.72. The GPIO pins are always physically on the target -- the
+    // controller "claims" them -- but an index configured as outputs carries
+    // controller-to-target messages and one configured as inputs carries
+    // target-to-controller messages. The configuration is implementation
+    // specific and never on the bus, so the only honest report is that it
+    // varies. Unspecified would be a different and wrong claim: it would say
+    // the specification never addresses this, and it does.
+    LookupVwireIndex( 128, &info );
+    TEST_CHECK( info.direction == VwireDirection::Configurable );
+    LookupVwireIndex( 255, &info );
+    TEST_CHECK( info.direction == VwireDirection::Configurable );
+
+    // Same paragraph: "The reset is programmable to be reset by either eSPI
+    // Reset# or Platform Reset."
+    TEST_CHECK( info.reset_domain != nullptr );
+    TEST_CHECK( info.reset_domain != nullptr && std::string( info.reset_domain ).find( "programmable" ) != std::string::npos );
+
+    // The ranges the specification really is silent about stay silent.
+    LookupVwireIndex( 64, &info );
+    TEST_CHECK( info.direction == VwireDirection::Unspecified );
+    TEST_CHECK( info.reset_domain == nullptr );
+    LookupVwireIndex( 8, &info );
+    TEST_CHECK( info.direction == VwireDirection::Unspecified );
+    TEST_CHECK( info.reset_domain == nullptr );
+}
+
+// The four-row header block at the top of Tables 9-14, pp.63-69.
+//
+// Direction alternates in a way that is easy to get backwards, and nothing in
+// a decode of real traffic would look wrong if it were: a GET_VWIRE answering
+// at index 4 decodes identically whichever way the arrow points.
+void TestVwireIndexHeaders()
+{
+    struct Expect
+    {
+        uint8_t index;
+        const char* reset_domain;
+        VwireDirection direction;
+    };
+    const Expect table[] = {
+        { 2, "eSPI Reset#", VwireDirection::ControllerToTarget }, // Table 9, p.63
+        { 3, "eSPI Reset#", VwireDirection::ControllerToTarget }, // Table 10, p.64
+        { 4, "eSPI Reset#", VwireDirection::TargetToController }, // Table 11, p.65
+        { 5, "eSPI Reset#", VwireDirection::TargetToController }, // Table 12, p.66
+        { 6, "PLTRST#", VwireDirection::TargetToController },     // Table 13, p.67
+        { 7, "PLTRST#", VwireDirection::ControllerToTarget },     // Table 14, p.68
+    };
+
+    for( const Expect& e : table )
+    {
+        VwireIndexInfo info;
+        TEST_CHECK( LookupVwireIndex( e.index, &info ) );
+        if( info.reset_domain == nullptr || std::string( info.reset_domain ) != e.reset_domain )
+        {
+            std::fprintf( stderr, "FAIL  index %u: expected reset %s got %s\n", e.index, e.reset_domain,
+                          info.reset_domain != nullptr ? info.reset_domain : "(none)" );
+            TEST_CHECK( false );
+        }
+        if( info.direction != e.direction )
+            std::fprintf( stderr, "FAIL  index %u: direction differs\n", e.index );
+        TEST_CHECK( info.direction == e.direction );
+    }
+}
+
+// Tables 9-14, pp.63-69: every bit of every System Event index, typed from the
+// rendered pages in the order they are printed.
+//
+// The Polarity column is what turns a level bit into a statement about the
+// platform, and it is invisible in a decode that only prints the bit. Two
+// wires in the same byte with opposite polarities and the same level mean
+// opposite things.
+void TestVwireSystemEventWires()
+{
+    struct Expect
+    {
+        uint8_t index;
+        uint8_t level_bit;
+        const char* name;
+        VwirePolarity polarity;
+        VwireResetState reset;
+    };
+    const VwirePolarity kHigh = VwirePolarity::ActiveHigh;
+    const VwirePolarity kLow = VwirePolarity::ActiveLow;
+    const VwirePolarity kNone = VwirePolarity::None;
+    const VwireResetState kActive = VwireResetState::Active;
+    const VwireResetState kInactive = VwireResetState::Inactive;
+    const VwireResetState kNoReset = VwireResetState::None;
+
+    const Expect table[] = {
+        // Table 9, p.63
+        { 2, 3, "RSV", kNone, kNoReset },
+        { 2, 2, "SLP_S5#", kLow, kActive },
+        { 2, 1, "SLP_S4#", kLow, kActive },
+        { 2, 0, "SLP_S3#", kLow, kActive },
+        // Table 10, p.64
+        { 3, 3, "RSV", kNone, kNoReset },
+        { 3, 2, "OOB_RST_WARN", kHigh, kInactive },
+        { 3, 1, "PLTRST#", kLow, kActive },
+        { 3, 0, "SUS_STAT#", kLow, kActive },
+        // Table 11, p.65
+        { 4, 3, "PME#", kLow, kInactive },
+        { 4, 2, "WAKE#", kLow, kInactive },
+        { 4, 1, "RSV", kNone, kNoReset },
+        { 4, 0, "OOB_RST_ACK", kHigh, kInactive },
+        // Table 12, pp.66-67. TARGET_BOOT_LOAD_STATUS is the one wire whose
+        // cell says "Polarity: As defined above" -- '0' and '1' are a corrupted
+        // and an intact boot image, not an asserted and a released signal --
+        // and the one whose Reset cell prints '0' rather than Active/Inactive.
+        { 5, 3, "TARGET_BOOT_LOAD_STATUS", VwirePolarity::AsDefined, VwireResetState::Zero },
+        { 5, 2, "ERROR_NONFATAL", kHigh, kInactive },
+        { 5, 1, "ERROR_FATAL", kHigh, kInactive },
+        { 5, 0, "TARGET_BOOT_LOAD_DONE", kHigh, kInactive },
+        // Table 13, pp.67-68
+        { 6, 3, "HOST_RST_ACK", kHigh, kInactive },
+        { 6, 2, "RCIN#", kLow, kInactive },
+        { 6, 1, "SMI#", kLow, kInactive },
+        { 6, 0, "SCI#", kLow, kInactive },
+        // Table 14, pp.68-69
+        { 7, 3, "RSV", kNone, kNoReset },
+        { 7, 2, "NMIOUT#", kLow, kInactive },
+        { 7, 1, "SMIOUT#", kLow, kInactive },
+        { 7, 0, "HOST_RST_WARN", kHigh, kInactive },
+    };
+
+    size_t row = 0;
+    for( uint8_t index = 2; index <= 7; ++index )
+    {
+        VwireBit wires[ 8 ];
+        const size_t count = VwireBitsForIndex( index, wires, 8 );
+
+        // Eight bits, four of them levels: every index has exactly four wires
+        // and there is no room for a fifth.
+        if( count != 4 )
+            std::fprintf( stderr, "FAIL  index %u has %zu wires, expected 4\n", index, count );
+        TEST_CHECK_EQ( count, size_t( 4 ) );
+
+        for( size_t i = 0; i < count && i < 4 && row < sizeof( table ) / sizeof( table[ 0 ] ); ++i, ++row )
+        {
+            const VwireBit& got = wires[ i ];
+            const Expect& want = table[ row ];
+
+            if( got.name == nullptr || std::string( got.name ) != want.name || got.level_bit != want.level_bit )
+            {
+                std::fprintf( stderr, "FAIL  index %u wire %zu: expected %s at bit %u, got %s at bit %u\n", index, i, want.name,
+                              want.level_bit, got.name != nullptr ? got.name : "(null)", got.level_bit );
+                TEST_CHECK( false );
+                continue;
+            }
+
+            if( got.polarity != want.polarity || got.reset != want.reset )
+                std::fprintf( stderr, "FAIL  index %u %s: polarity or reset differs\n", index, want.name );
+            TEST_CHECK( got.polarity == want.polarity );
+            TEST_CHECK( got.reset == want.reset );
+
+            // The pages print RSV in the Virtual Wire column for exactly three
+            // level bits across the six tables.
+            TEST_CHECK_EQ( got.reserved, std::string( want.name ) == "RSV" );
+        }
+    }
+
+    // Every row of the typed table was reached. Without this a wire dropped
+    // from the header shrinks both sides of the comparison and passes.
+    TEST_CHECK_EQ( row, sizeof( table ) / sizeof( table[ 0 ] ) );
+}
+
+// An index outside 2-7 has no wire names, and must not borrow another index's.
+void TestVwireUnnamedIndices()
+{
+    for( unsigned index : { 0u, 1u, 8u, 63u, 64u, 127u, 128u, 255u } )
+        TEST_CHECK_EQ( VwireBitsForIndex( static_cast<uint8_t>( index ), nullptr, 0 ), size_t( 0 ) );
+}
+
+// Section 4.2.2, p.57: "The 6-bit count field allows up to 64 Virtual Wire
+// groups to be communicated in the same packet. This is a 0-based count."
+// Bits 7:6 are Reserved.
+//
+// The count decides how many bytes the packet holds, so a count field one bit
+// too narrow does not mislabel a field -- it puts the CRC on the wrong byte.
+void TestVwireCountByte()
+{
+    TEST_CHECK_EQ( VwireGroupCount( 0x00 ), 1u );
+    TEST_CHECK_EQ( VwireGroupCount( 0x01 ), 2u );
+    TEST_CHECK_EQ( VwireGroupCount( 0x3F ), 64u );
+    TEST_CHECK_EQ( VwireMaxGroups(), 64u );
+
+    // The reserved bits do not change the count, which is exactly why they
+    // have to be reported separately -- nothing else would notice them.
+    TEST_CHECK_EQ( VwireGroupCount( 0xC0 ), 1u );
+    TEST_CHECK_EQ( VwireGroupCount( 0xFF ), 64u );
+    TEST_CHECK_EQ( VwireCountReservedBits( 0x3F ), uint8_t( 0x00 ) );
+    TEST_CHECK_EQ( VwireCountReservedBits( 0xC2 ), uint8_t( 0xC0 ) );
+    TEST_CHECK_EQ( VwireCountReservedBits( 0x40 ), uint8_t( 0x40 ) );
+}
+
+// Table 8, p.60 and p.61: the interrupt layout and the valid/level pairing.
+void TestVwireDataFormats()
+{
+    // "Index=0h: IRQ 0 - 127" and "Index=1h: IRQ 128 - 255", with bit 7 the
+    // level and bits 6:0 the line. Decoding an interrupt event as valid/level
+    // turns an IRQ number into wires that do not exist.
+    TEST_CHECK_EQ( VwireIrqLevelBit(), uint8_t( 7 ) );
+    TEST_CHECK_EQ( VwireIrqNumber( 0, 0x00 ), 0u );
+    TEST_CHECK_EQ( VwireIrqNumber( 0, 0x82 ), 2u );   // level bit is not part of the line
+    TEST_CHECK_EQ( VwireIrqNumber( 0, 0x7F ), 127u );
+    TEST_CHECK_EQ( VwireIrqNumber( 1, 0x00 ), 128u );
+    TEST_CHECK_EQ( VwireIrqNumber( 1, 0x03 ), 131u );
+    TEST_CHECK_EQ( VwireIrqNumber( 1, 0xFF ), 255u );
+
+    // "Valid: This field indicates the validity of the 1-to-1 corresponding
+    // Level bits" -- bits 7:4 over bits 3:0.
+    TEST_CHECK_EQ( VwireValidBitFor( 0 ), uint8_t( 4 ) );
+    TEST_CHECK_EQ( VwireValidBitFor( 1 ), uint8_t( 5 ) );
+    TEST_CHECK_EQ( VwireValidBitFor( 2 ), uint8_t( 6 ) );
+    TEST_CHECK_EQ( VwireValidBitFor( 3 ), uint8_t( 7 ) );
+    TEST_CHECK_EQ( VwireLevelMask(), uint8_t( 0x0F ) );
+
+    // Each per-index table restates the pairing on every row. The rule above
+    // is transcribed once, so this checks the two agree everywhere -- reserved
+    // rows included, which is where a table is likeliest to drift.
+    for( uint8_t index = 2; index <= 7; ++index )
+    {
+        VwireBit wires[ 8 ];
+        const size_t count = VwireBitsForIndex( index, wires, 8 );
+        for( size_t i = 0; i < count && i < 8; ++i )
+        {
+            TEST_CHECK( wires[ i ].level_bit <= 3 );
+            TEST_CHECK_EQ( wires[ i ].valid_bit, uint8_t( wires[ i ].level_bit + 4 ) );
+        }
+    }
+}
+
 } // namespace
 
 int main()
@@ -633,6 +940,13 @@ int main()
     TestConfigFieldTypes();
     TestConfigResetState();
     TestResponseModifierAppend();
+    TestVwirePackets();
+    TestVwireIndexRanges();
+    TestVwireIndexHeaders();
+    TestVwireSystemEventWires();
+    TestVwireUnnamedIndices();
+    TestVwireCountByte();
+    TestVwireDataFormats();
     TestWaitState();
     TestMalformed();
     TestFixtureLoaderRejectsGarbage();

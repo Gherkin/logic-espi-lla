@@ -7,13 +7,13 @@ Response
   Virtual Wire Packet  1 group
     Count  0x00  1 group
     Index  0x05  System Event, target to controller
-    Data  0x88
-      TARGET_BOOT_LOAD_STATUS  bit 3 = 1  high
-      Masked  ERROR_NONFATAL, ERROR_FATAL, TARGET_BOOT_LOAD_DONE  valid bit clear, level not updated
+    Data  0x19
+      TARGET_BOOT_LOAD_DONE  bit 0 = 1  high, asserted
+      Masked  TARGET_BOOT_LOAD_STATUS, ERROR_NONFATAL, ERROR_FATAL  valid bit clear, level not updated
   Status  0x010F
     PC_FREE  bit 0 = 1
     NP_FREE  bit 1 = 1
     VWIRE_FREE  bit 2 = 1
     OOB_FREE  bit 3 = 1
     FLASH_C_FREE  bit 8 = 1
-  CRC  0x9F  ok
+  CRC  0x5D  ok

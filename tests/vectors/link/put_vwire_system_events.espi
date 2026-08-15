@@ -1,0 +1,25 @@
+# PUT_VWIRE carrying the three controller-to-target System Event indices.
+#
+# HAND BUILT FROM THE SPECIFICATION, NOT FROM THE CAPTURE. espi_dump.txt
+# contains no PUT_VWIRE at all and never shows more than one group in a packet,
+# so nothing independent confirms these bytes.
+#
+# Indices 2, 3 and 7 are the ones Tables 9, 10 and 14 mark Controller to
+# Target, which is what a PUT_VWIRE from the controller should be carrying.
+# Three groups, so the 0-based count byte is 02h (section 4.2.2, p.57).
+#
+#   02h data 73h -- SLP_S5# asserted, SLP_S4# and SLP_S3# released. All three
+#                   are active low, so the levels read the opposite way round
+#                   from the bits. Bit 3 is RSV and its valid bit 7 is clear.
+#   03h data 62h -- OOB_RST_WARN and PLTRST# valid and released; SUS_STAT#
+#                   masked, so its level is not being updated here.
+#   07h data 51h -- NMIOUT# asserted (active low, level 0) and HOST_RST_WARN
+#                   asserted (active high, level 1) in the same byte. SMIOUT#
+#                   masked. Both polarities asserted at once is the point: a
+#                   table with the two swapped decodes this exactly backwards.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4): 6Dh over the command,
+# 95h over {08 0F 01}.
+CMD 04 02 02 73 03 62 07 51 6D
+TAR
+RSP 08 0F 01 95

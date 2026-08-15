@@ -168,11 +168,29 @@
 // ---------------------------------------------------------------------------
 //  FIELDS
 //
-//  X( OFFSET, HIGH, LOW, NAME, ENUM, ZERO_BASED )
+//  X( OFFSET, HIGH, LOW, NAME, ENUM, ZERO_BASED, ACCESS, DEFAULT, VALUE )
 //
 //  ENUM        the value table above, or None for a plain number
-//  ZERO_BASED  true where the specification says the field is a 0-based count,
-//              so the decoder can report both the raw value and what it means
+//  ZERO_BASED  true where the specification says the field is a 0-based count
+//  ACCESS      RO, RW, or RwOrRo where the page prints "RW / RO"
+//  DEFAULT     Value  -- the page gives a number, in VALUE
+//              HwInit -- hardware initialised, no value the spec can state
+//              None   -- the page leaves the Default column empty
+//  VALUE       the numeric default; 0 and meaningless unless DEFAULT is Value
+//
+//  WHY THE DEFAULT COLUMN IS LOAD BEARING, and not just documentation: it is
+//  the state machine's starting point. A capture begins with the link out of
+//  eSPI Reset#, and what the bus looks like at that moment is exactly this
+//  column -- Single I/O, CRC checking off, peripheral channel enabled and
+//  every other channel disabled. A decoder that does not know the reset state
+//  cannot decode the first transaction of a capture, because nothing on the
+//  wire announces it. See ConfigResetValue() for the assembled state.
+//
+//  ONE ODDITY, recorded rather than smoothed over: the Default column for
+//  Flash Block Erase Size (040h bits 4:2, p.103) prints "01b" -- two bits for
+//  a three bit field. Read as 001b it is 4 Kbytes, which is the only value
+//  that makes sense next to the rest of the table, and that is how it is
+//  transcribed. Flagged because it is the spec being sloppy, not us.
 //
 //  Reserved spans are listed so that every bit of the DWord is accounted for.
 //  They are not rendered unless they are nonzero, which the specification
@@ -181,62 +199,62 @@
 
 #define ESPI_CONFIG_FIELD_TABLE( X )                                                                                               \
     /* --- 004h Device Identification, p.94 --- */                                                                                 \
-    X( 0x004, 31, 8, "Reserved", None, false )                                                                                     \
-    X( 0x004, 7, 0, "Version ID", None, false )                                                                                    \
+    X( 0x004, 31, 8, "Reserved", None, false, RO, Value, 0 )                                                                       \
+    X( 0x004, 7, 0, "Version ID", None, false, RO, Value, 0x01 )                                                                   \
     /* --- 008h General Capabilities and Configurations, pp.94-96 --- */                                                           \
-    X( 0x008, 31, 31, "CRC Checking Enable", None, false )                                                                         \
-    X( 0x008, 30, 30, "Response Modifier Enable", None, false )                                                                    \
-    X( 0x008, 29, 29, "RTC-Integrated-BMC", None, false )                                                                          \
-    X( 0x008, 28, 28, "Alert Mode", None, false )                                                                                  \
-    X( 0x008, 27, 26, "I/O Mode Select", IoModeSelect, false )                                                                     \
-    X( 0x008, 25, 24, "I/O Mode Support", IoModeSupport, false )                                                                   \
-    X( 0x008, 23, 23, "Open Drain Alert# Select", None, false )                                                                    \
-    X( 0x008, 22, 20, "Operating Frequency", Frequency, false )                                                                    \
-    X( 0x008, 19, 19, "Open Drain Alert# Supported", None, false )                                                                 \
-    X( 0x008, 18, 16, "Maximum Frequency Supported", Frequency, false )                                                            \
-    X( 0x008, 15, 12, "Maximum WAIT STATE Allowed", WaitState, false )                                                             \
-    X( 0x008, 11, 8, "Reserved", None, false )                                                                                     \
-    X( 0x008, 7, 0, "Channel Supported", None, false )                                                                             \
+    X( 0x008, 31, 31, "CRC Checking Enable", None, false, RW, Value, 0 )                                                           \
+    X( 0x008, 30, 30, "Response Modifier Enable", None, false, RW, Value, 0 )                                                      \
+    X( 0x008, 29, 29, "RTC-Integrated-BMC", None, false, RO, HwInit, 0 )                                                           \
+    X( 0x008, 28, 28, "Alert Mode", None, false, RW, Value, 0 )                                                                    \
+    X( 0x008, 27, 26, "I/O Mode Select", IoModeSelect, false, RW, Value, 0 )                                                       \
+    X( 0x008, 25, 24, "I/O Mode Support", IoModeSupport, false, RO, None, 0 )                                                      \
+    X( 0x008, 23, 23, "Open Drain Alert# Select", None, false, RW, None, 0 )                                                       \
+    X( 0x008, 22, 20, "Operating Frequency", Frequency, false, RW, Value, 0 )                                                      \
+    X( 0x008, 19, 19, "Open Drain Alert# Supported", None, false, RO, HwInit, 0 )                                                  \
+    X( 0x008, 18, 16, "Maximum Frequency Supported", Frequency, false, RO, HwInit, 0 )                                             \
+    X( 0x008, 15, 12, "Maximum WAIT STATE Allowed", WaitState, false, RW, Value, 0 )                                               \
+    X( 0x008, 11, 8, "Reserved", None, false, RO, Value, 0 )                                                                       \
+    X( 0x008, 7, 0, "Channel Supported", None, false, RO, HwInit, 0 )                                                              \
     /* --- 010h Channel 0 (Peripheral), pp.97-98 --- */                                                                            \
-    X( 0x010, 31, 15, "Reserved", None, false )                                                                                    \
-    X( 0x010, 14, 12, "Peripheral Channel Maximum Read Request Size", MaxReadRequest, false )                                       \
-    X( 0x010, 11, 11, "Reserved", None, false )                                                                                    \
-    X( 0x010, 10, 8, "Peripheral Channel Maximum Payload Size Selected", MaxPayload, false )                                        \
-    X( 0x010, 7, 7, "Reserved", None, false )                                                                                      \
-    X( 0x010, 6, 4, "Peripheral Channel Maximum Payload Size Supported", MaxPayload, false )                                        \
-    X( 0x010, 3, 3, "Reserved", None, false )                                                                                      \
-    X( 0x010, 2, 2, "Bus Master Enable", None, false )                                                                             \
-    X( 0x010, 1, 1, "Peripheral Channel Ready", None, false )                                                                      \
-    X( 0x010, 0, 0, "Peripheral Channel Enable", None, false )                                                                     \
+    X( 0x010, 31, 15, "Reserved", None, false, RO, Value, 0 )                                                                      \
+    X( 0x010, 14, 12, "Peripheral Channel Maximum Read Request Size", MaxReadRequest, false, RW, Value, 1 )                        \
+    X( 0x010, 11, 11, "Reserved", None, false, RO, Value, 0 )                                                                      \
+    X( 0x010, 10, 8, "Peripheral Channel Maximum Payload Size Selected", MaxPayload, false, RW, Value, 1 )                         \
+    X( 0x010, 7, 7, "Reserved", None, false, RO, Value, 0 )                                                                        \
+    X( 0x010, 6, 4, "Peripheral Channel Maximum Payload Size Supported", MaxPayload, false, RO, HwInit, 0 )                        \
+    X( 0x010, 3, 3, "Reserved", None, false, RO, Value, 0 )                                                                        \
+    X( 0x010, 2, 2, "Bus Master Enable", None, false, RW, Value, 0 )                                                               \
+    X( 0x010, 1, 1, "Peripheral Channel Ready", None, false, RO, Value, 0 )                                                        \
+    X( 0x010, 0, 0, "Peripheral Channel Enable", None, false, RW, Value, 1 )                                                       \
     /* --- 020h Channel 1 (Virtual Wire), p.99 --- */                                                                              \
-    X( 0x020, 31, 22, "Reserved", None, false )                                                                                    \
-    X( 0x020, 21, 16, "Operating Maximum Virtual Wire Count", None, true )                                                          \
-    X( 0x020, 15, 14, "Reserved", None, false )                                                                                    \
-    X( 0x020, 13, 8, "Maximum Virtual Wire Count Supported", None, true )                                                           \
-    X( 0x020, 7, 2, "Reserved", None, false )                                                                                      \
-    X( 0x020, 1, 1, "Virtual Wire Channel Ready", None, false )                                                                     \
-    X( 0x020, 0, 0, "Virtual Wire Channel Enable", None, false )                                                                    \
+    X( 0x020, 31, 22, "Reserved", None, false, RO, Value, 0 )                                                                      \
+    X( 0x020, 21, 16, "Operating Maximum Virtual Wire Count", None, true, RW, Value, 0 )                                           \
+    X( 0x020, 15, 14, "Reserved", None, false, RO, Value, 0 )                                                                      \
+    X( 0x020, 13, 8, "Maximum Virtual Wire Count Supported", None, true, RO, HwInit, 0 )                                           \
+    X( 0x020, 7, 2, "Reserved", None, false, RO, Value, 0 )                                                                        \
+    X( 0x020, 1, 1, "Virtual Wire Channel Ready", None, false, RO, Value, 0 )                                                      \
+    X( 0x020, 0, 0, "Virtual Wire Channel Enable", None, false, RW, Value, 0 )                                                     \
     /* --- 030h Channel 2 (OOB Message), p.100 --- */                                                                              \
-    X( 0x030, 31, 11, "Reserved", None, false )                                                                                    \
-    X( 0x030, 10, 8, "OOB Message Channel Maximum Payload Size Selected", MaxPayload, false )                                       \
-    X( 0x030, 7, 7, "Reserved", None, false )                                                                                      \
-    X( 0x030, 6, 4, "OOB Message Channel Maximum Payload Size Supported", MaxPayload, false )                                       \
-    X( 0x030, 3, 2, "Reserved", None, false )                                                                                      \
-    X( 0x030, 1, 1, "OOB Message Channel Ready", None, false )                                                                      \
-    X( 0x030, 0, 0, "OOB Message Channel Enable", None, false )                                                                     \
+    X( 0x030, 31, 11, "Reserved", None, false, RO, Value, 0 )                                                                      \
+    X( 0x030, 10, 8, "OOB Message Channel Maximum Payload Size Selected", MaxPayload, false, RW, Value, 1 )                        \
+    X( 0x030, 7, 7, "Reserved", None, false, RO, Value, 0 )                                                                        \
+    X( 0x030, 6, 4, "OOB Message Channel Maximum Payload Size Supported", MaxPayload, false, RO, HwInit, 0 )                       \
+    X( 0x030, 3, 2, "Reserved", None, false, RO, Value, 0 )                                                                        \
+    X( 0x030, 1, 1, "OOB Message Channel Ready", None, false, RO, Value, 0 )                                                       \
+    X( 0x030, 0, 0, "OOB Message Channel Enable", None, false, RW, Value, 0 )                                                      \
     /* --- 040h Channel 3 (Flash Access), pp.101-103 --- */                                                                        \
-    X( 0x040, 31, 24, "RPMC OP1 Opcode on the 1st RPMC Flash device", None, false )                                                 \
-    X( 0x040, 23, 20, "RPMC Counter on the 1st RPMC Flash device", None, true )                                                     \
-    X( 0x040, 19, 18, "Reserved", None, false )                                                                                    \
-    X( 0x040, 17, 16, "Flash Sharing Capability Supported", FlashSharingCap, false )                                                \
-    X( 0x040, 15, 15, "Reserved", None, false )                                                                                    \
-    X( 0x040, 14, 12, "Flash Access Channel Maximum Read Request Size", MaxReadRequest, false )                                      \
-    X( 0x040, 11, 11, "Flash Sharing Mode", FlashSharingMode, false )                                                               \
-    X( 0x040, 10, 8, "Flash Access Channel Maximum Payload Size Selected", MaxPayload, false )                                       \
-    X( 0x040, 7, 5, "Flash Access Channel Maximum Payload Size Supported", MaxPayload, false )                                       \
-    X( 0x040, 4, 2, "Flash Block Erase Size", FlashBlockErase, false )                                                              \
-    X( 0x040, 1, 1, "Flash Access Channel Ready", None, false )                                                                     \
-    X( 0x040, 0, 0, "Flash Access Channel Enable", None, false )
+    X( 0x040, 31, 24, "RPMC OP1 Opcode on the 1st RPMC Flash device", None, false, RO, HwInit, 0 )                                 \
+    X( 0x040, 23, 20, "RPMC Counter on the 1st RPMC Flash device", None, true, RO, HwInit, 0 )                                     \
+    X( 0x040, 19, 18, "Reserved", None, false, RO, Value, 0 )                                                                      \
+    X( 0x040, 17, 16, "Flash Sharing Capability Supported", FlashSharingCap, false, RO, HwInit, 0 )                                \
+    X( 0x040, 15, 15, "Reserved", None, false, RO, Value, 0 )                                                                      \
+    X( 0x040, 14, 12, "Flash Access Channel Maximum Read Request Size", MaxReadRequest, false, RW, Value, 1 )                      \
+    X( 0x040, 11, 11, "Flash Sharing Mode", FlashSharingMode, false, RwOrRo, HwInit, 0 )                                           \
+    X( 0x040, 10, 8, "Flash Access Channel Maximum Payload Size Selected", MaxPayload, false, RW, Value, 1 )                       \
+    X( 0x040, 7, 5, "Flash Access Channel Maximum Payload Size Supported", MaxPayload, false, RO, HwInit, 0 )                      \
+    X( 0x040, 4, 2, "Flash Block Erase Size", FlashBlockErase, false, RW, Value, 1 )                                               \
+    X( 0x040, 1, 1, "Flash Access Channel Ready", None, false, RO, Value, 0 )                                                      \
+    X( 0x040, 0, 0, "Flash Access Channel Enable", None, false, RW, Value, 0 )
 
 // ---------------------------------------------------------------------------
 //  CHANNEL SUPPORTED -- offset 08h bits 7:0, p.96.

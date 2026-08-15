@@ -49,10 +49,14 @@ struct FieldEntry
     const char* name;
     const char* group; // "None" when the field is a plain number
     bool zero_based;
+    ConfigAccess access;
+    ConfigDefault default_kind;
+    uint32_t default_value;
 };
 
-#define ESPI_FIELD_ENTRY( OFFSET, HIGH, LOW, NAME, ENUM, ZERO_BASED )                                                              \
-    FieldEntry{ OFFSET, HIGH, LOW, NAME, #ENUM, ZERO_BASED },
+#define ESPI_FIELD_ENTRY( OFFSET, HIGH, LOW, NAME, ENUM, ZERO_BASED, ACCESS, DEFAULT, VALUE )                                      \
+    FieldEntry{ OFFSET,   HIGH,    LOW,          NAME,  #ENUM, ZERO_BASED,                                                         \
+                ConfigAccess::ACCESS, ConfigDefault::DEFAULT, VALUE },
 const FieldEntry kFields[] = { ESPI_CONFIG_FIELD_TABLE( ESPI_FIELD_ENTRY ) };
 #undef ESPI_FIELD_ENTRY
 
@@ -154,10 +158,42 @@ size_t DecodeConfigRegister( uint16_t address, uint32_t value, ConfigField* out,
             field.zero_based = f.zero_based;
             field.value = Extract( value, f.high, f.low );
             field.meaning = LookupEnum( f.group, field.value );
+            field.access = f.access;
+            field.default_kind = f.default_kind;
+            field.default_value = f.default_value;
         }
         ++count;
     }
     return count;
+}
+
+bool ConfigResetValue( uint16_t address, uint32_t* value, uint32_t* known )
+{
+    const char* name = nullptr;
+    if( ClassifyConfigAddress( address, &name ) != ConfigAddress::Decoded )
+        return false;
+
+    uint32_t reset = 0;
+    uint32_t mask = 0;
+
+    for( const FieldEntry& f : kFields )
+    {
+        if( f.offset != address )
+            continue;
+        if( f.default_kind != ConfigDefault::Value )
+            continue; // HwInit or blank: a property of the part, not the spec
+
+        const uint8_t width = static_cast<uint8_t>( f.high - f.low + 1 );
+        const uint32_t field_mask = ( width >= 32 ) ? 0xFFFFFFFFu : ( ( 1u << width ) - 1u );
+        reset |= ( f.default_value & field_mask ) << f.low;
+        mask |= field_mask << f.low;
+    }
+
+    if( value != nullptr )
+        *value = reset;
+    if( known != nullptr )
+        *known = mask;
+    return true;
 }
 
 size_t ChannelSupportCount()

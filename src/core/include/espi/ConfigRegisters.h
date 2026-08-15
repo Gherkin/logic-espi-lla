@@ -12,6 +12,23 @@ namespace espi
 // Transcribed in src/core/tables/ConfigRegisters.h from base spec §6.2,
 // pp.92-103 -- that header is where the values live and what the QC worksheet
 // checks.
+// How software may touch a field.
+enum class ConfigAccess : uint8_t
+{
+    RO,     // read only
+    RW,     // read/write
+    RwOrRo, // the page prints "RW / RO" -- read only when the target supports
+            // only one of the two options the field selects between
+};
+
+// What the specification's Default column says.
+enum class ConfigDefault : uint8_t
+{
+    Value,  // a number the spec states, in ConfigField::default_value
+    HwInit, // hardware initialised; no value the specification can give
+    None,   // the Default column is empty on the page
+};
+
 struct ConfigField
 {
     uint8_t high = 0;             // most significant bit of the field
@@ -21,6 +38,10 @@ struct ConfigField
     bool zero_based = false;      // a count where 0 means one
     uint32_t value = 0;           // extracted from the register
     const char* meaning = nullptr; // decoded encoding, or null for a plain number
+
+    ConfigAccess access = ConfigAccess::RO;
+    ConfigDefault default_kind = ConfigDefault::None;
+    uint32_t default_value = 0; // meaningful only when default_kind is Value
 };
 
 // What a configuration address turns out to be.
@@ -54,6 +75,23 @@ bool LookupConfigRegister( uint16_t address, const char** name );
 // than `capacity` means the caller's buffer was too small and nothing was
 // written past the end.
 size_t DecodeConfigRegister( uint16_t address, uint32_t value, ConfigField* out, size_t capacity );
+
+// ---------------------------------------------------------------------------
+//  RESET STATE
+//
+//  Where the state machine starts. A capture begins with the link coming out
+//  of eSPI Reset#, and nothing on the wire announces what mode the bus is in
+//  -- the very first transaction has to be decoded using the reset defaults or
+//  not at all. Single I/O, CRC checking off, peripheral channel enabled and
+//  the rest disabled all come from here.
+//
+//  Writes `value` with every field whose default the specification states, and
+//  `known` with a mask of the bits that value covers. Bits outside `known` are
+//  hardware initialised or left blank by the spec, so their reset state is a
+//  property of the part and cannot be assumed. Returns false for an address
+//  with no transcribed layout.
+// ---------------------------------------------------------------------------
+bool ConfigResetValue( uint16_t address, uint32_t* value, uint32_t* known );
 
 // The Channel Supported bit field at offset 08h bits 7:0.
 struct ChannelSupportBit

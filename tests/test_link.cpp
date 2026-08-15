@@ -399,6 +399,145 @@ void TestConfigRegisterRanges()
     }
 }
 
+// Access type and default for every field, typed from the Type and Default
+// columns of §6.2, pp.94-103.
+//
+// The Default column is not documentation. It is where the state machine
+// starts: a capture opens with the link out of eSPI Reset#, and nothing on the
+// wire says what mode the bus is in, so the first transaction is decoded from
+// these values or not at all.
+void TestConfigFieldTypes()
+{
+    struct Expect
+    {
+        uint16_t address;
+        uint8_t high;
+        uint8_t low;
+        ConfigAccess access;
+        ConfigDefault kind;
+        uint32_t value;
+    };
+    const Expect table[] = {
+        // 004h, p.94
+        { 0x004, 7, 0, ConfigAccess::RO, ConfigDefault::Value, 0x01 },
+        // 008h, pp.94-96. Note 25:24 and 23 have an empty Default column.
+        { 0x008, 31, 31, ConfigAccess::RW, ConfigDefault::Value, 0 },
+        { 0x008, 30, 30, ConfigAccess::RW, ConfigDefault::Value, 0 },
+        { 0x008, 29, 29, ConfigAccess::RO, ConfigDefault::HwInit, 0 },
+        { 0x008, 28, 28, ConfigAccess::RW, ConfigDefault::Value, 0 },
+        { 0x008, 27, 26, ConfigAccess::RW, ConfigDefault::Value, 0 },
+        { 0x008, 25, 24, ConfigAccess::RO, ConfigDefault::None, 0 },
+        { 0x008, 23, 23, ConfigAccess::RW, ConfigDefault::None, 0 },
+        { 0x008, 22, 20, ConfigAccess::RW, ConfigDefault::Value, 0 },
+        { 0x008, 19, 19, ConfigAccess::RO, ConfigDefault::HwInit, 0 },
+        { 0x008, 18, 16, ConfigAccess::RO, ConfigDefault::HwInit, 0 },
+        { 0x008, 15, 12, ConfigAccess::RW, ConfigDefault::Value, 0 },
+        { 0x008, 7, 0, ConfigAccess::RO, ConfigDefault::HwInit, 0 },
+        // 010h, pp.97-98
+        { 0x010, 14, 12, ConfigAccess::RW, ConfigDefault::Value, 1 },
+        { 0x010, 10, 8, ConfigAccess::RW, ConfigDefault::Value, 1 },
+        { 0x010, 6, 4, ConfigAccess::RO, ConfigDefault::HwInit, 0 },
+        { 0x010, 2, 2, ConfigAccess::RW, ConfigDefault::Value, 0 },
+        { 0x010, 1, 1, ConfigAccess::RO, ConfigDefault::Value, 0 },
+        { 0x010, 0, 0, ConfigAccess::RW, ConfigDefault::Value, 1 },
+        // 020h, p.99
+        { 0x020, 21, 16, ConfigAccess::RW, ConfigDefault::Value, 0 },
+        { 0x020, 13, 8, ConfigAccess::RO, ConfigDefault::HwInit, 0 },
+        { 0x020, 1, 1, ConfigAccess::RO, ConfigDefault::Value, 0 },
+        { 0x020, 0, 0, ConfigAccess::RW, ConfigDefault::Value, 0 },
+        // 030h, p.100
+        { 0x030, 10, 8, ConfigAccess::RW, ConfigDefault::Value, 1 },
+        { 0x030, 6, 4, ConfigAccess::RO, ConfigDefault::HwInit, 0 },
+        { 0x030, 1, 1, ConfigAccess::RO, ConfigDefault::Value, 0 },
+        { 0x030, 0, 0, ConfigAccess::RW, ConfigDefault::Value, 0 },
+        // 040h, pp.101-103
+        { 0x040, 31, 24, ConfigAccess::RO, ConfigDefault::HwInit, 0 },
+        { 0x040, 23, 20, ConfigAccess::RO, ConfigDefault::HwInit, 0 },
+        { 0x040, 17, 16, ConfigAccess::RO, ConfigDefault::HwInit, 0 },
+        { 0x040, 14, 12, ConfigAccess::RW, ConfigDefault::Value, 1 },
+        { 0x040, 11, 11, ConfigAccess::RwOrRo, ConfigDefault::HwInit, 0 },
+        { 0x040, 10, 8, ConfigAccess::RW, ConfigDefault::Value, 1 },
+        { 0x040, 7, 5, ConfigAccess::RO, ConfigDefault::HwInit, 0 },
+        // The page prints "01b" for this three bit field. Read as 001b.
+        { 0x040, 4, 2, ConfigAccess::RW, ConfigDefault::Value, 1 },
+        { 0x040, 1, 1, ConfigAccess::RO, ConfigDefault::Value, 0 },
+        { 0x040, 0, 0, ConfigAccess::RW, ConfigDefault::Value, 0 },
+    };
+
+    for( const Expect& e : table )
+    {
+        ConfigField fields[ 16 ];
+        const size_t count = DecodeConfigRegister( e.address, 0, fields, 16 );
+        bool found = false;
+        for( size_t i = 0; i < count && i < 16; ++i )
+        {
+            const ConfigField& f = fields[ i ];
+            if( f.high != e.high || f.low != e.low )
+                continue;
+            found = true;
+            if( f.access != e.access || f.default_kind != e.kind
+                || ( e.kind == ConfigDefault::Value && f.default_value != e.value ) )
+                std::fprintf( stderr, "FAIL  %03X bits %u:%u (%s): type or default differs\n", e.address, e.high, e.low,
+                              f.name );
+            TEST_CHECK( f.access == e.access );
+            TEST_CHECK( f.default_kind == e.kind );
+            if( e.kind == ConfigDefault::Value )
+                TEST_CHECK_EQ( f.default_value, e.value );
+        }
+        if( !found )
+            std::fprintf( stderr, "FAIL  %03X has no field at bits %u:%u\n", e.address, e.high, e.low );
+        TEST_CHECK( found );
+    }
+}
+
+// The assembled reset state, which is what a decoder must assume for the very
+// first transaction of a capture.
+void TestConfigResetState()
+{
+    uint32_t value = 0;
+    uint32_t known = 0;
+
+    // 008h. The two fields that decide how the bus is read: I/O Mode Select
+    // 00b is Single I/O, and CRC Checking Enable 0 means the CRC byte is
+    // present but not checked. Both matter before a single byte is decoded.
+    TEST_CHECK( ConfigResetValue( 0x008, &value, &known ) );
+    TEST_CHECK_EQ( ( value >> 26 ) & 0x3u, 0u ); // Single I/O
+    TEST_CHECK_EQ( ( value >> 31 ) & 0x1u, 0u ); // CRC checking disabled
+    TEST_CHECK_EQ( ( value >> 12 ) & 0xFu, 0u ); // 16 byte times of wait state
+    // I/O Mode Support, Open Drain Alert# Select and the HwInit fields have no
+    // spec default, so the reset state cannot claim to know them.
+    TEST_CHECK_EQ( ( known >> 24 ) & 0x3u, 0u ); // I/O Mode Support: unknown
+    TEST_CHECK_EQ( ( known >> 23 ) & 0x1u, 0u ); // Open Drain Alert# Select
+    TEST_CHECK_EQ( ( known >> 16 ) & 0x7u, 0u ); // Maximum Frequency Supported
+    TEST_CHECK_EQ( known & 0xFFu, 0u );          // Channel Supported
+    TEST_CHECK_EQ( ( known >> 31 ) & 0x1u, 1u ); // but CRC enable is known
+
+    // 010h. The peripheral channel is the only one enabled out of reset.
+    TEST_CHECK( ConfigResetValue( 0x010, &value, &known ) );
+    TEST_CHECK_EQ( value & 0x1u, 1u );           // Peripheral Channel Enable
+    TEST_CHECK_EQ( ( value >> 1 ) & 0x1u, 0u );  // not yet Ready
+    TEST_CHECK_EQ( ( value >> 8 ) & 0x7u, 1u );  // 64 byte payload
+    TEST_CHECK_EQ( ( value >> 12 ) & 0x7u, 1u ); // 64 byte read request
+
+    // 020h, 030h and 040h all come up disabled.
+    for( uint16_t address : { uint16_t( 0x020 ), uint16_t( 0x030 ), uint16_t( 0x040 ) } )
+    {
+        TEST_CHECK( ConfigResetValue( address, &value, &known ) );
+        if( ( value & 0x1u ) != 0u )
+            std::fprintf( stderr, "FAIL  register %03X comes up enabled\n", address );
+        TEST_CHECK_EQ( value & 0x1u, 0u );
+        TEST_CHECK_EQ( known & 0x1u, 1u ); // and that is a stated default
+    }
+
+    // 004h advertises this revision of the specification.
+    TEST_CHECK( ConfigResetValue( 0x004, &value, &known ) );
+    TEST_CHECK_EQ( value & 0xFFu, 0x01u );
+
+    // A register with no transcribed layout has no reset state to offer.
+    TEST_CHECK( !ConfigResetValue( 0x044, &value, &known ) );
+    TEST_CHECK( !ConfigResetValue( 0x050, &value, &known ) );
+}
+
 // Table 3, p.30, typed from the rendered page.
 void TestResponseEncodings()
 {
@@ -491,6 +630,8 @@ int main()
     TestGeneralCapabilities();
     TestConfigRegisterGaps();
     TestConfigRegisterRanges();
+    TestConfigFieldTypes();
+    TestConfigResetState();
     TestResponseModifierAppend();
     TestWaitState();
     TestMalformed();

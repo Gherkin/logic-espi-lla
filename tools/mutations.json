@@ -271,22 +271,22 @@
     {
       "label": "config: VW operating count field one bit too narrow",
       "file": "src/core/tables/ConfigRegisters.h",
-      "find": "X( 0x020, 21, 16, \"Operating Maximum Virtual Wire Count\", None, true )",
-      "replace": "X( 0x020, 20, 16, \"Operating Maximum Virtual Wire Count\", None, true )",
+      "find": "X( 0x020, 21, 16, \"Operating Maximum Virtual Wire Count\", None, true, RW, Value, 0 )",
+      "replace": "X( 0x020, 20, 16, \"Operating Maximum Virtual Wire Count\", None, true, RW, Value, 0 )",
       "tests": "test_link"
     },
     {
       "label": "config: VW supported count no longer 0-based",
       "file": "src/core/tables/ConfigRegisters.h",
-      "find": "X( 0x020, 13, 8, \"Maximum Virtual Wire Count Supported\", None, true )",
-      "replace": "X( 0x020, 13, 8, \"Maximum Virtual Wire Count Supported\", None, false )",
+      "find": "X( 0x020, 13, 8, \"Maximum Virtual Wire Count Supported\", None, true, RO, HwInit, 0 )",
+      "replace": "X( 0x020, 13, 8, \"Maximum Virtual Wire Count Supported\", None, false, RO, HwInit, 0 )",
       "tests": "test_link"
     },
     {
       "label": "config: VW channel enable and ready bits swapped",
       "file": "src/core/tables/ConfigRegisters.h",
-      "find": "X( 0x020, 0, 0, \"Virtual Wire Channel Enable\", None, false )",
-      "replace": "X( 0x020, 1, 1, \"Virtual Wire Channel Enable\", None, false )",
+      "find": "X( 0x020, 0, 0, \"Virtual Wire Channel Enable\", None, false, RW, Value, 0 )",
+      "replace": "X( 0x020, 1, 1, \"Virtual Wire Channel Enable\", None, false, RW, Value, 0 )",
       "tests": "test_link"
     },
     {
@@ -325,10 +325,80 @@
       "tests": "test_link"
     },
     {
+      "label": "reset: bus comes up in Dual rather than Single I/O",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x008, 27, 26, \"I/O Mode Select\", IoModeSelect, false, RW, Value, 0 )",
+      "replace": "X( 0x008, 27, 26, \"I/O Mode Select\", IoModeSelect, false, RW, Value, 1 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "reset: CRC checking on out of reset",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x008, 31, 31, \"CRC Checking Enable\", None, false, RW, Value, 0 )",
+      "replace": "X( 0x008, 31, 31, \"CRC Checking Enable\", None, false, RW, Value, 1 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "reset: peripheral channel comes up disabled",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x010, 0, 0, \"Peripheral Channel Enable\", None, false, RW, Value, 1 )",
+      "replace": "X( 0x010, 0, 0, \"Peripheral Channel Enable\", None, false, RW, Value, 0 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "reset: virtual wire channel comes up enabled",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x020, 0, 0, \"Virtual Wire Channel Enable\", None, false, RW, Value, 0 )",
+      "replace": "X( 0x020, 0, 0, \"Virtual Wire Channel Enable\", None, false, RW, Value, 1 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "reset: peripheral payload default 64 -> 128 bytes",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x010, 10, 8, \"Peripheral Channel Maximum Payload Size Selected\", MaxPayload, false, RW, Value, 1 )",
+      "replace": "X( 0x010, 10, 8, \"Peripheral Channel Maximum Payload Size Selected\", MaxPayload, false, RW, Value, 2 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "reset: Version ID advertises 02h",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x004, 7, 0, \"Version ID\", None, false, RO, Value, 0x01 )",
+      "replace": "X( 0x004, 7, 0, \"Version ID\", None, false, RO, Value, 0x02 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "reset: HwInit field claimed as a known default",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x008, 7, 0, \"Channel Supported\", None, false, RO, HwInit, 0 )",
+      "replace": "X( 0x008, 7, 0, \"Channel Supported\", None, false, RO, Value, 0 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "reset: blank Default column claimed as a known zero",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x008, 25, 24, \"I/O Mode Support\", IoModeSupport, false, RO, None, 0 )",
+      "replace": "X( 0x008, 25, 24, \"I/O Mode Support\", IoModeSupport, false, RO, Value, 0 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "access: Channel Supported typed read/write",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x008, 7, 0, \"Channel Supported\", None, false, RO, HwInit, 0 )",
+      "replace": "X( 0x008, 7, 0, \"Channel Supported\", None, false, RW, HwInit, 0 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "access: Flash Sharing Mode typed plain RW",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x040, 11, 11, \"Flash Sharing Mode\", FlashSharingMode, false, RwOrRo, HwInit, 0 )",
+      "replace": "X( 0x040, 11, 11, \"Flash Sharing Mode\", FlashSharingMode, false, RW, HwInit, 0 )",
+      "tests": "test_link"
+    },
+    {
       "label": "config: OOB payload selected field read from the supported bits",
       "file": "src/core/tables/ConfigRegisters.h",
-      "find": "X( 0x030, 10, 8, \"OOB Message Channel Maximum Payload Size Selected\", MaxPayload, false )",
-      "replace": "X( 0x030, 6, 4, \"OOB Message Channel Maximum Payload Size Selected\", MaxPayload, false )",
+      "find": "X( 0x030, 10, 8, \"OOB Message Channel Maximum Payload Size Selected\", MaxPayload, false, RW, Value, 1 )",
+      "replace": "X( 0x030, 6, 4, \"OOB Message Channel Maximum Payload Size Selected\", MaxPayload, false, RW, Value, 1 )",
       "tests": "test_link"
     }
   ]

@@ -23,9 +23,30 @@ struct ConfigField
     const char* meaning = nullptr; // decoded encoding, or null for a plain number
 };
 
-// Look up a register by its configuration address. Only the low 12 bits are
-// decoded (§3.7, p.37). Returns false for an address whose layout has not been
-// transcribed, which the decoder reports as an explicit gap.
+// What a configuration address turns out to be.
+//
+// The three failure cases are deliberately distinct. A target ignores the top
+// four address bits (§3.7, p.38), so a controller driving them nonzero still
+// reaches the right register -- but it is violating the specification, and
+// silently masking the address off would hide that. Likewise bits [1:0] are
+// described as hard-wired to 00, so seeing them set is an anomaly worth
+// reporting even though the register still resolves.
+enum class ConfigAddress : uint8_t
+{
+    Decoded,         // named in Table 21 and its fields are transcribed
+    NoFieldLayout,   // named in Table 21, fields not transcribed yet
+    ReservedRange,   // a reserved or platform specific range
+    UpperBitsSet,    // bits 15:12 must be driven to zero by the controller
+    NotDwordAligned, // bits [1:0] are hard-wired to 00
+};
+
+// Classify an address and report which Table 21 range its low 12 bits land in.
+// The name is filled in for every outcome, malformed ones included, so a
+// decode can say which register a bad address was reaching for.
+ConfigAddress ClassifyConfigAddress( uint16_t address, const char** name );
+
+// Convenience: true only when the address is well formed and has a field
+// layout, i.e. ClassifyConfigAddress returned Decoded.
 bool LookupConfigRegister( uint16_t address, const char** name );
 
 // Split a register value into its fields, most significant first. Writes up to

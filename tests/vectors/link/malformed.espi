@@ -22,3 +22,25 @@ RSP 08 00 0B 00 00 0F 01 91
 # 4. Chip select deasserting mid-header: the address field is one byte short
 #    and there is no CRC at all.
 CMD 21 00
+
+# 5. A configuration address with the top four bits set. §3.7 p.38 says the
+#    controller must drive them to zero and the target should ignore them --
+#    so this transaction WORKS, reaches the Channel 1 register, and is still a
+#    controller violating the specification. The decoder must say so rather
+#    than mask the address off and report it as plain 0020h. Nothing else on
+#    the bus will flag it.
+CMD 21 F0 20 DC
+TAR
+RSP 08 00 0B 00 00 0F 01 91
+
+# 6. A configuration address that is not DWord aligned. Bits [1:0] are
+#    described as hard-wired to 00, so seeing 22h is an anomaly.
+CMD 21 00 22 C6
+TAR
+RSP 08 00 00 00 00 0F 01 2E
+
+# 7. A well formed address in a reserved range. 050h-7FFh is Reserved in
+#    Table 21, so there is no register here to name bits in.
+CMD 21 00 50 9F
+TAR
+RSP 08 00 00 00 00 0F 01 2E

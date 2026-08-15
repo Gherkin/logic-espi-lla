@@ -274,28 +274,129 @@ void TestConfigRegisterGaps()
         TEST_CHECK( std::string( name ) == e.name );
     }
 
-    const uint16_t gaps[] = {
-        0x0000, // Reserved, Table 21
-        0x000C, // Reserved
-        0x0014, // Reserved
-        0x0044, // Channel 3 Capabilities 2 -- real, not transcribed yet
-        0x0048, // Channel 3 Capabilities 3 -- real, not transcribed yet
-        0x004C, // Channel 3 Capabilities 4 -- real, not transcribed yet
-        0x0050, // Reserved
-        0x0800, // Platform specific
-    };
-    for( uint16_t address : gaps )
+    // Table 21 names these, but nobody has transcribed their bits. "A register
+    // we have not done yet" is a different answer from "not a register".
+    const uint16_t no_layout[] = { 0x0044, 0x0048, 0x004C };
+    for( uint16_t address : no_layout )
     {
-        if( LookupConfigRegister( address, nullptr ) )
-            std::fprintf( stderr, "FAIL  address 0x%04X resolved to a layout nobody transcribed\n", address );
+        const char* name = nullptr;
+        if( ClassifyConfigAddress( address, &name ) != ConfigAddress::NoFieldLayout )
+            std::fprintf( stderr, "FAIL  address 0x%04X should be a named register with no layout\n", address );
+        TEST_CHECK( ClassifyConfigAddress( address, &name ) == ConfigAddress::NoFieldLayout );
         TEST_CHECK( !LookupConfigRegister( address, nullptr ) );
     }
 
-    // Only the low 12 bits are decoded (§3.7, p.37), so the high nibble of the
-    // address must not change which register is found.
-    const char* masked = nullptr;
-    TEST_CHECK( LookupConfigRegister( 0xF020, &masked ) );
-    TEST_CHECK( std::string( masked ) == "Channel 1 Capabilities and Configurations" );
+    const uint16_t reserved[] = {
+        0x0000, // Reserved, Table 21
+        0x000C, // Reserved
+        0x0014, // Reserved, and 014h-01Fh is a range rather than one DWord
+        0x0018, // still inside 014h-01Fh
+        0x0050, // Reserved, 050h-7FFh
+        0x0800, // Platform specific, 800h-FFFh
+        0x0FFC, // the last DWord of the platform range
+    };
+    for( uint16_t address : reserved )
+    {
+        if( ClassifyConfigAddress( address, nullptr ) != ConfigAddress::ReservedRange )
+            std::fprintf( stderr, "FAIL  address 0x%04X should classify as reserved\n", address );
+        TEST_CHECK( ClassifyConfigAddress( address, nullptr ) == ConfigAddress::ReservedRange );
+        TEST_CHECK( !LookupConfigRegister( address, nullptr ) );
+    }
+
+    // §3.7, p.38: "The 4 MSB address bits must be driven to all zeros by eSPI
+    // controller. eSPI targets should ignore the 4 MSB address bits."
+    //
+    // Because the target ignores them, F020h still reaches the Channel 1
+    // register -- which is precisely why the decoder must NOT quietly mask
+    // them off and call it 0020h. One of those addresses is malformed and
+    // happens to work, and an analyzer that hides that is hiding a real bug.
+    TEST_CHECK( ClassifyConfigAddress( 0xF020, nullptr ) == ConfigAddress::UpperBitsSet );
+    TEST_CHECK( ClassifyConfigAddress( 0x1020, nullptr ) == ConfigAddress::UpperBitsSet );
+    TEST_CHECK( !LookupConfigRegister( 0xF020, nullptr ) );
+
+    // A malformed address still reports which register it was reaching for.
+    const char* reached = nullptr;
+    ClassifyConfigAddress( 0xF020, &reached );
+    TEST_CHECK( reached != nullptr && std::string( reached ) == "Channel 1 Capabilities and Configurations" );
+
+    // §3.7, p.38: "address bit[1:0] hard-wired to always 00".
+    TEST_CHECK( ClassifyConfigAddress( 0x0021, nullptr ) == ConfigAddress::NotDwordAligned );
+    TEST_CHECK( ClassifyConfigAddress( 0x0022, nullptr ) == ConfigAddress::NotDwordAligned );
+    TEST_CHECK( ClassifyConfigAddress( 0x0006, nullptr ) == ConfigAddress::NotDwordAligned );
+
+    // An unaligned address inside a four-byte register range still names it.
+    // This is what makes Table 21's End column observable at all: only the
+    // base of such a range is ever a legal address, so nothing else reads the
+    // End, and a wrong End would sit there undetected.
+    const char* inside = nullptr;
+    ClassifyConfigAddress( 0x0007, &inside );
+    TEST_CHECK( inside != nullptr && std::string( inside ) == "Device Identification" );
+    ClassifyConfigAddress( 0x0006, &inside );
+    TEST_CHECK( inside != nullptr && std::string( inside ) == "Device Identification" );
+    ClassifyConfigAddress( 0x0022, &inside );
+    TEST_CHECK( inside != nullptr && std::string( inside ) == "Channel 1 Capabilities and Configurations" );
+
+    // The malformedness checks come first: a malformed address is reported as
+    // malformed even when it would otherwise land on a reserved range.
+    TEST_CHECK( ClassifyConfigAddress( 0xF050, nullptr ) == ConfigAddress::UpperBitsSet );
+}
+
+// Table 21 gives every entry a Start and an End -- Device Identification is
+// 004h through 007h, not 004h alone. The reserved spans between the registers
+// are ranges too, and a range transcribed with the wrong end swallows the
+// register that follows it.
+void TestConfigRegisterRanges()
+{
+    struct Span
+    {
+        uint16_t start;
+        uint16_t end;
+        const char* name;
+    };
+    // Typed from Table 21, p.93, Start (Hex) and End (Hex) columns.
+    const Span table[] = {
+        { 0x000, 0x003, "Reserved" },
+        { 0x004, 0x007, "Device Identification" },
+        { 0x008, 0x00B, "General Capabilities and Configurations" },
+        { 0x00C, 0x00F, "Reserved" },
+        { 0x010, 0x013, "Channel 0 Capabilities and Configurations" },
+        { 0x014, 0x01F, "Reserved" },
+        { 0x020, 0x023, "Channel 1 Capabilities and Configurations" },
+        { 0x024, 0x02F, "Reserved" },
+        { 0x030, 0x033, "Channel 2 Capabilities and Configurations" },
+        { 0x034, 0x03F, "Reserved" },
+        { 0x040, 0x043, "Channel 3 Capabilities and Configurations" },
+        { 0x044, 0x047, "Channel 3 Capabilities and Configurations 2" },
+        { 0x048, 0x04B, "Channel 3 Capabilities and Configurations 3" },
+        { 0x04C, 0x04F, "Channel 3 Capabilities and Configurations 4" },
+        { 0x050, 0x7FF, "Reserved" },
+        { 0x800, 0xFFF, "Platform Specific registers" },
+    };
+
+    // Every address in a span must report that span's name -- every address,
+    // not just the DWord-aligned ones, because the unaligned ones are what pin
+    // the End column.
+    for( const Span& s : table )
+    {
+        for( uint16_t a = s.start; a <= s.end; ++a )
+        {
+            const char* name = nullptr;
+            ClassifyConfigAddress( a, &name );
+            if( name == nullptr || std::string( name ) != s.name )
+                std::fprintf( stderr, "FAIL  address 0x%03X: expected %s got %s\n", a, s.name,
+                              name != nullptr ? name : "(none)" );
+            TEST_CHECK( name != nullptr && std::string( name ) == s.name );
+        }
+
+        const uint16_t past = static_cast<uint16_t>( s.end + 1 );
+        if( past <= 0xFFF )
+        {
+            const char* name = nullptr;
+            ClassifyConfigAddress( past, &name );
+            if( name != nullptr && std::string( name ) == s.name )
+                std::fprintf( stderr, "FAIL  span %s runs past its end at 0x%03X\n", s.name, past );
+        }
+    }
 }
 
 // Table 3, p.30, typed from the rendered page.
@@ -389,6 +490,7 @@ int main()
     TestCaptureTransactions();
     TestGeneralCapabilities();
     TestConfigRegisterGaps();
+    TestConfigRegisterRanges();
     TestResponseModifierAppend();
     TestWaitState();
     TestMalformed();

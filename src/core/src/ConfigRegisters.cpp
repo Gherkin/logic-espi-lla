@@ -9,13 +9,22 @@ namespace espi
 namespace
 {
 
-struct RegisterEntry
+enum class Kind : uint8_t
 {
-    uint16_t offset;
-    const char* name;
+    Fields,
+    NoFields,
+    Reserved,
 };
 
-#define ESPI_REGISTER_ENTRY( OFFSET, NAME ) RegisterEntry{ OFFSET, NAME },
+struct RegisterEntry
+{
+    uint16_t start;
+    uint16_t end;
+    const char* name;
+    Kind kind;
+};
+
+#define ESPI_REGISTER_ENTRY( START, END, NAME, KIND ) RegisterEntry{ START, END, NAME, Kind::KIND },
 const RegisterEntry kRegisters[] = { ESPI_CONFIG_REGISTER_TABLE( ESPI_REGISTER_ENTRY ) };
 #undef ESPI_REGISTER_ENTRY
 
@@ -70,23 +79,64 @@ uint32_t Extract( uint32_t value, uint8_t high, uint8_t low )
 
 } // namespace
 
-bool LookupConfigRegister( uint16_t address, const char** name )
+ConfigAddress ClassifyConfigAddress( uint16_t address, const char** name )
 {
-    const uint16_t offset = static_cast<uint16_t>( address & ESPI_CONFIG_ADDRESS_MASK );
+    // Resolve the range FIRST, before judging the address, so that even a
+    // malformed one can report which register it was reaching for. "0006h is
+    // inside Device Identification, but bits [1:0] are hard-wired to 00" is a
+    // more useful thing to tell a person than "names no register".
+    //
+    // It also makes Table 21's End column observable. Every register range is
+    // four bytes and only its base is a legal address, so without this the End
+    // of a register range could be transcribed wrongly and nothing would ever
+    // read it.
+    const uint16_t offset = static_cast<uint16_t>( address & ESPI_CONFIG_ADDRESS_SELECT_MASK );
+    const RegisterEntry* entry = nullptr;
     for( const RegisterEntry& r : kRegisters )
     {
-        if( r.offset != offset )
-            continue;
-        if( name != nullptr )
-            *name = r.name;
-        return true;
+        if( offset >= r.start && offset <= r.end )
+        {
+            entry = &r;
+            break;
+        }
     }
-    return false;
+    if( name != nullptr && entry != nullptr )
+        *name = entry->name;
+
+    // Now judge the address itself. Masking it and carrying on would decode
+    // the right register and throw away the fact that the controller is out
+    // of spec.
+    if( ( address & ESPI_CONFIG_ADDRESS_UPPER_MASK ) != 0 )
+        return ConfigAddress::UpperBitsSet;
+    if( ( address & ESPI_CONFIG_ADDRESS_DWORD_MASK ) != 0 )
+        return ConfigAddress::NotDwordAligned;
+
+    // Table 21 covers 000h-FFFh with no holes, so a null entry here means the
+    // transcription has one. Reported as reserved rather than asserted,
+    // because an analyzer must not crash on a malformed bus.
+    if( entry == nullptr )
+        return ConfigAddress::ReservedRange;
+
+    switch( entry->kind )
+    {
+    case Kind::Fields:
+        return ConfigAddress::Decoded;
+    case Kind::NoFields:
+        return ConfigAddress::NoFieldLayout;
+    case Kind::Reserved:
+        break;
+    }
+    return ConfigAddress::ReservedRange;
+}
+
+bool LookupConfigRegister( uint16_t address, const char** name )
+{
+    return ClassifyConfigAddress( address, name ) == ConfigAddress::Decoded;
 }
 
 size_t DecodeConfigRegister( uint16_t address, uint32_t value, ConfigField* out, size_t capacity )
 {
-    const uint16_t offset = static_cast<uint16_t>( address & ESPI_CONFIG_ADDRESS_MASK );
+    const uint16_t offset = static_cast<uint16_t>( address & ESPI_CONFIG_ADDRESS_SELECT_MASK );
     size_t count = 0;
 
     for( const FieldEntry& f : kFields )
@@ -127,7 +177,7 @@ uint8_t ChannelSupportPlatformMask()
 
 bool IsChannelSupportedField( uint16_t address, const ConfigField& field )
 {
-    return ( address & ESPI_CONFIG_ADDRESS_MASK ) == 0x008 && field.high == 7 && field.low == 0;
+    return ( address & ESPI_CONFIG_ADDRESS_SELECT_MASK ) == 0x008 && field.high == 7 && field.low == 0;
 }
 
 } // namespace espi

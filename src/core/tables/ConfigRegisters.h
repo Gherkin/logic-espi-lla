@@ -13,16 +13,34 @@
 //           6.2.1.6 Offset 30h: Channel 2 Capabilities and Configurations, p.100
 //           6.2.1.7 Offset 40h: Channel 3 Capabilities and Configurations, pp.101-103
 //
-//  ADDRESSING. Registers are DWord granular and only the low 12 bits of the
-//  16-bit address are decoded -- the target has a 4 KB register space (§3.7,
-//  p.37). Offsets 800h-FFFh are platform specific and 050h-7FFh are reserved,
-//  so neither is transcribed here; both report as an untranscribed address
-//  rather than being guessed at.
+//  ADDRESSING -- three separate rules, §3.7 pp.37-38, and they are not the
+//  same rule stated three ways:
+//
+//    1. The target has a 4 KB register space, so only the low 12 bits of the
+//       16-bit address select a register.
+//    2. "address bit[1:0] hard-wired to always 00" -- access is DWord
+//       granular, so a register is only ever addressed at its base.
+//    3. "The 4 MSB address bits must be driven to all zeros by eSPI
+//       controller. eSPI targets should ignore the 4 MSB address bits."
+//
+//  Rule 3 is the one worth being careful about. Because the target ignores
+//  bits 15:12, an address of F020h still reaches the Channel 1 register -- but
+//  it is a controller that is violating the specification, and an analyzer
+//  that quietly masks the address off hides exactly the kind of bug an
+//  analyzer exists to find. F020h and 0020h are not the same address; one of
+//  them is malformed and happens to work. The same goes for a nonzero bit[1:0].
+//
+//  Both are reported rather than corrected. Neither stops the decode.
+//
+//  RANGES, NOT OFFSETS. Table 21 gives a Start and an End for every entry --
+//  Device Identification is 004h through 007h, not 004h. The whole map is
+//  transcribed below, reserved rows included, so it can be checked against the
+//  page row for row. Only ranges marked as decoded have a field layout.
 //
 //  NOT TRANSCRIBED YET, deliberately: Channel 3 Capabilities and
-//  Configurations 2, 3 and 4 at offsets 044h, 048h and 04Ch. They carry RPMC
-//  detail for the 2nd-4th flash devices and belong with the flash channel
-//  work. A GET_CONFIGURATION of those offsets reports a gap.
+//  Configurations 2, 3 and 4 at 044h, 048h and 04Ch. They carry RPMC detail
+//  for the 2nd-4th flash devices and belong with the flash channel work. They
+//  are named in the map but have no field layout, so they report as a gap.
 //
 //  WHY THE ENABLE AND READY BITS MATTER TO THE DECODER ITSELF. This is not
 //  just labelling: a SET_CONFIGURATION to offset 08h that is accepted changes
@@ -32,14 +50,34 @@
 //  microseconds of a capture and then produces garbage.
 // ---------------------------------------------------------------------------
 
-// X( OFFSET, NAME )
+// X( START, END, NAME, KIND )
+//
+// Every row of Table 21, p.93, in page order. KIND is ours, not the page's:
+//
+//   Fields    the range is a register and its bit layout is transcribed below
+//   NoFields  Table 21 names it, but nobody has transcribed its bits yet
+//   Reserved  Table 21 says Reserved or Platform Specific
+//
+// The distinction between NoFields and Reserved matters to a reader of the
+// decode: "a register we have not done yet" and "not a register" are different
+// answers to the same question.
 #define ESPI_CONFIG_REGISTER_TABLE( X )                                                                                            \
-    X( 0x004, "Device Identification" )                                                                                            \
-    X( 0x008, "General Capabilities and Configurations" )                                                                          \
-    X( 0x010, "Channel 0 Capabilities and Configurations" )                                                                        \
-    X( 0x020, "Channel 1 Capabilities and Configurations" )                                                                        \
-    X( 0x030, "Channel 2 Capabilities and Configurations" )                                                                        \
-    X( 0x040, "Channel 3 Capabilities and Configurations" )
+    X( 0x000, 0x003, "Reserved", Reserved )                                                                                        \
+    X( 0x004, 0x007, "Device Identification", Fields )                                                                             \
+    X( 0x008, 0x00B, "General Capabilities and Configurations", Fields )                                                           \
+    X( 0x00C, 0x00F, "Reserved", Reserved )                                                                                        \
+    X( 0x010, 0x013, "Channel 0 Capabilities and Configurations", Fields )                                                         \
+    X( 0x014, 0x01F, "Reserved", Reserved )                                                                                        \
+    X( 0x020, 0x023, "Channel 1 Capabilities and Configurations", Fields )                                                         \
+    X( 0x024, 0x02F, "Reserved", Reserved )                                                                                        \
+    X( 0x030, 0x033, "Channel 2 Capabilities and Configurations", Fields )                                                         \
+    X( 0x034, 0x03F, "Reserved", Reserved )                                                                                        \
+    X( 0x040, 0x043, "Channel 3 Capabilities and Configurations", Fields )                                                         \
+    X( 0x044, 0x047, "Channel 3 Capabilities and Configurations 2", NoFields )                                                     \
+    X( 0x048, 0x04B, "Channel 3 Capabilities and Configurations 3", NoFields )                                                     \
+    X( 0x04C, 0x04F, "Channel 3 Capabilities and Configurations 4", NoFields )                                                     \
+    X( 0x050, 0x7FF, "Reserved", Reserved )                                                                                        \
+    X( 0x800, 0xFFF, "Platform Specific registers", Reserved )
 
 // ---------------------------------------------------------------------------
 //  VALUE ENCODINGS
@@ -218,7 +256,14 @@
 // not an error when set -- only unnamed.
 #define ESPI_CHANNEL_SUPPORTED_PLATFORM_MASK 0xF0u
 
-// Only the low 12 bits of the configuration address are decoded (§3.7, p.37).
-#define ESPI_CONFIG_ADDRESS_MASK 0x0FFFu
+// The three addressing rules from §3.7, pp.37-38. See the banner above for why
+// the upper bits are reported rather than masked away.
+//
+//   SELECT   bits that choose a register -- the 4 KB space
+//   UPPER    bits the controller must drive to zero, and the target ignores
+//   DWORD    bits hard-wired to 00, so a register is addressed at its base
+#define ESPI_CONFIG_ADDRESS_SELECT_MASK 0x0FFFu
+#define ESPI_CONFIG_ADDRESS_UPPER_MASK 0xF000u
+#define ESPI_CONFIG_ADDRESS_DWORD_MASK 0x0003u
 
 #endif // ESPI_TABLE_CONFIG_REGISTERS_H

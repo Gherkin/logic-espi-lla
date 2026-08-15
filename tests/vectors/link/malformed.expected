@@ -28,3 +28,54 @@ Response
 Command
   Opcode  0x21  GET_CONFIGURATION
 TRUNCATED  chip select deasserted mid-packet [ERROR]
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0xF020  reaches Channel 1 Capabilities and Configurations, but the top 4 address bits must be driven to zero [!]
+  CRC  0xDC  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000B00
+    Register Layout  address is malformed, so the register it names is not trusted [!]
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x91  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0022  inside Channel 1 Capabilities and Configurations, but address bits [1:0] are hard-wired to 00 [!]
+  CRC  0xC6  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000000
+    Register Layout  address is not DWord aligned, so it names no register [!]
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x2E  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0050  Reserved
+  CRC  0x9F  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000000
+    Register Layout  Reserved -- not a register with a layout [!]
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x2E  ok

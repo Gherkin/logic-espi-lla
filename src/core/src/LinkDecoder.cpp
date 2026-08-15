@@ -176,13 +176,63 @@ void AddChannelSupportChildren( Field* parent, uint32_t value )
         parent->Add( Field( "Platform specific channels", Hex( platform, 2 ), platform, 8, parent->span ) );
 }
 
+// Describe a configuration address: the register it names, or why it does not
+// name one. Returns the text to append to the Address field, and sets a
+// severity when the address itself is out of spec.
+std::string DescribeConfigAddress( uint16_t address, Severity* severity )
+{
+    const char* name = nullptr;
+    *severity = Severity::Info;
+
+    switch( ClassifyConfigAddress( address, &name ) )
+    {
+    case ConfigAddress::Decoded:
+    case ConfigAddress::NoFieldLayout:
+    case ConfigAddress::ReservedRange:
+        return name != nullptr ? std::string( "  " ) + name : std::string();
+
+    case ConfigAddress::UpperBitsSet:
+        // The target ignores these bits, so the transaction still works. That
+        // is exactly why it is worth saying: nothing else on the bus will.
+        *severity = Severity::Warning;
+        return std::string( "  reaches " ) + ( name != nullptr ? name : "no register" )
+               + ", but the top 4 address bits must be driven to zero";
+
+    case ConfigAddress::NotDwordAligned:
+        *severity = Severity::Warning;
+        return std::string( "  inside " ) + ( name != nullptr ? name : "no register" )
+               + ", but address bits [1:0] are hard-wired to 00";
+    }
+    return std::string();
+}
+
 // Resolve a configuration DWord into named fields.
 void AddConfigChildren( Field* data, uint16_t address, uint32_t value )
 {
     const char* register_name = nullptr;
-    if( !LookupConfigRegister( address, &register_name ) )
+    const ConfigAddress kind = ClassifyConfigAddress( address, &register_name );
+
+    if( kind != ConfigAddress::Decoded )
     {
-        Field gap( "Register Layout", "no layout transcribed for address " + Hex( address & 0x0FFF, 3 ), address, 16, data->span );
+        std::string why;
+        switch( kind )
+        {
+        case ConfigAddress::NoFieldLayout:
+            why = std::string( register_name ) + " -- bit layout not transcribed yet";
+            break;
+        case ConfigAddress::ReservedRange:
+            why = std::string( register_name != nullptr ? register_name : "unmapped" ) + " -- not a register with a layout";
+            break;
+        case ConfigAddress::UpperBitsSet:
+            why = "address is malformed, so the register it names is not trusted";
+            break;
+        case ConfigAddress::NotDwordAligned:
+            why = "address is not DWord aligned, so it names no register";
+            break;
+        case ConfigAddress::Decoded:
+            break;
+        }
+        Field gap( "Register Layout", why, address, 16, data->span );
         gap.severity = Severity::Warning;
         data->Add( std::move( gap ) );
         return;
@@ -285,16 +335,16 @@ bool ReadElements( PhaseReader* reader, const ElementList& list, Field* parent, 
         // Addr16 only ever appears in GET_CONFIGURATION and SET_CONFIGURATION,
         // so naming the register here also tells the Data32 that follows --
         // possibly in the other phase -- what it is looking at.
+        Severity address_severity = Severity::Info;
         if( element == Element::Addr16 )
         {
             config->have_address = true;
             config->address = static_cast<uint16_t>( value );
-            const char* register_name = nullptr;
-            if( LookupConfigRegister( config->address, &register_name ) )
-                text += std::string( "  " ) + register_name;
+            text += DescribeConfigAddress( config->address, &address_severity );
         }
 
         Field field( ElementName( element ), text, value, static_cast<uint8_t>( size * 8 ), span );
+        field.severity = address_severity;
 
         if( element == Element::Status16 )
             AddStatusChildren( &field, static_cast<uint16_t>( value ) );

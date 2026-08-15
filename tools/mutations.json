@@ -215,22 +215,57 @@
     {
       "label": "config: Channel 1 register moved off offset 020h",
       "file": "src/core/tables/ConfigRegisters.h",
-      "find": "X( 0x020, \"Channel 1 Capabilities and Configurations\" )",
-      "replace": "X( 0x024, \"Channel 1 Capabilities and Configurations\" )",
+      "find": "X( 0x020, 0x023, \"Channel 1 Capabilities and Configurations\", Fields )",
+      "replace": "X( 0x024, 0x027, \"Channel 1 Capabilities and Configurations\", Fields )",
       "tests": "test_link"
     },
     {
       "label": "config: Channel 2 and Channel 3 register names swapped",
       "file": "src/core/tables/ConfigRegisters.h",
-      "find": "X( 0x030, \"Channel 2 Capabilities and Configurations\" )",
-      "replace": "X( 0x030, \"Channel 3 Capabilities and Configurations\" )",
+      "find": "X( 0x030, 0x033, \"Channel 2 Capabilities and Configurations\", Fields )",
+      "replace": "X( 0x030, 0x033, \"Channel 3 Capabilities and Configurations\", Fields )",
       "tests": "test_link"
     },
     {
-      "label": "config: address mask 12 bits -> 16 bits",
+      "label": "config: register select widened past the 4 KB space",
       "file": "src/core/tables/ConfigRegisters.h",
-      "find": "#define ESPI_CONFIG_ADDRESS_MASK 0x0FFFu",
-      "replace": "#define ESPI_CONFIG_ADDRESS_MASK 0xFFFFu",
+      "find": "#define ESPI_CONFIG_ADDRESS_SELECT_MASK 0x0FFFu",
+      "replace": "#define ESPI_CONFIG_ADDRESS_SELECT_MASK 0xFFFFu",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: top 4 address bits no longer checked",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "#define ESPI_CONFIG_ADDRESS_UPPER_MASK 0xF000u",
+      "replace": "#define ESPI_CONFIG_ADDRESS_UPPER_MASK 0x0000u",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: DWord alignment rule dropped",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "#define ESPI_CONFIG_ADDRESS_DWORD_MASK 0x0003u",
+      "replace": "#define ESPI_CONFIG_ADDRESS_DWORD_MASK 0x0000u",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: Device Identification range ends one DWord early",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x004, 0x007, \"Device Identification\", Fields )",
+      "replace": "X( 0x004, 0x004, \"Device Identification\", Fields )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: reserved span 014h-01Fh swallows Channel 1",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x014, 0x01F, \"Reserved\", Reserved )",
+      "replace": "X( 0x014, 0x02F, \"Reserved\", Reserved )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: Channel 3 extension registers claimed as decoded",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x044, 0x047, \"Channel 3 Capabilities and Configurations 2\", NoFields )",
+      "replace": "X( 0x044, 0x047, \"Channel 3 Capabilities and Configurations 2\", Fields )",
       "tests": "test_link"
     },
     {

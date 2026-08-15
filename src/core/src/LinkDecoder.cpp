@@ -96,6 +96,7 @@ class PhaseReader
     uint8_t Crc() const { return mCrc.Value(); }
     ByteSpan Span() const { return mSpan; }
     bool Truncated() const { return mTruncated; }
+    espi::Phase PhaseOf() const { return mPhase; }
 
   private:
     ByteSource* mSource;
@@ -178,6 +179,11 @@ struct PacketContext
     // Set by the CycleHeader element for the Payload element that follows it.
     unsigned payload_bytes = 0;
     bool have_cycle_header = false;
+
+    // Whether the command phase carried a Posted cycle type. Read in the
+    // response phase, because section 3.9, p.42, makes one response code
+    // illegal for those: "DEFER response for posted transaction is invalid."
+    bool command_is_posted = false;
 
     // The decode stopped on purpose, because something on the wire left the
     // packet length unknown -- not because the source ran out. The two look
@@ -737,6 +743,12 @@ bool ReadCycleHeader( PhaseReader* reader, Field* parent, PacketContext* ctx )
         return false;
     }
 
+    // Only the command phase's cycle type says what kind of transaction this
+    // is. The response phase's, when there is one, is the completion coming
+    // back, and a completion is never the thing DEFER would be answering.
+    if( reader->PhaseOf() == Phase::Command )
+        ctx->command_is_posted = ( info.command_type == CycleCommandType::Posted );
+
     Field type_field( "Cycle Type", Hex( cycle_type, 2 ) + "  " + info.name, cycle_type, 8, type_span );
     type_field.Add( Field( "Command Type", CycleCommandTypeName( info.command_type ), 0, 8, type_span ) );
     type_field.Add( Field( "Direction", CycleDirectionText( info.direction ), 0, 8, type_span ) );
@@ -1092,6 +1104,19 @@ bool LinkDecoder::Decode( Transaction* out )
         response_field.severity = Severity::Error;
     else if( rinfo.code == ResponseCode::NonFatalError )
         response_field.severity = Severity::Warning;
+
+    // Section 3.9, p.42: "The valid responses for posted transactions
+    // initiated by eSPI controller are ACCEPT, FATAL ERROR and NON-FATAL
+    // ERROR. DEFER response for posted transaction is invalid."
+    //
+    // A deferred posted write decodes perfectly -- right length, right CRC,
+    // every field in place -- and is a target breaking the protocol. Nothing
+    // else on the bus flags it.
+    if( rinfo.code == ResponseCode::Defer && config.command_is_posted )
+    {
+        response_field.text += "  -- DEFER is not a valid response to a posted transaction";
+        response_field.severity = Severity::Error;
+    }
 
     // NO_RESPONSE means the target never drove the phase at all -- there is no
     // payload, no status and no CRC to read.

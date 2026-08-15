@@ -256,6 +256,13 @@
       "tests": "test_link"
     },
     {
+      "label": "cycle: Memory Write 32 typed non-posted",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( \"Memory Write 32\", 0x01, 0xFF, Peripheral, UpOrDown, Posted,",
+      "replace": "X( \"Memory Write 32\", 0x01, 0xFF, Peripheral, UpOrDown, NonPosted,",
+      "tests": "test_link"
+    },
+    {
       "label": "cycle: peripheral Successful Completion Without Data given both directions",
       "file": "src/core/tables/CycleTypes.h",
       "find": "X( \"Successful Completion Without Data\", 0x06, 0xFF, Peripheral, Up, Completion",

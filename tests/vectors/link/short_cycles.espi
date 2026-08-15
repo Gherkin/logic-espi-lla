@@ -15,12 +15,17 @@
 # undecodable packet rather than a mislabelled one. That case is in
 # malformed.espi.
 #
-# WHERE THE DATA SITS depends on the direction of the transfer, and Figure 26
-# p.40 draws all three of the controller-initiated forms:
+# WHERE THE DATA SITS depends on the direction of the transfer. The four forms
+# are drawn across two sections, because three of them are non-posted and the
+# fourth is not:
 #
-#   PUT_IORD_SHORT     HDR CRC            ->  RESPONSE Data STS CRC
-#   PUT_IOWR_SHORT     HDR Data CRC       ->  RESPONSE STS CRC
-#   PUT_MEMRD32_SHORT  HDR CRC            ->  RESPONSE Data STS CRC
+#   Figure 26, p.40, section 3.8 -- Non-Posted Transaction
+#     PUT_IORD_SHORT     HDR(16) CRC        ->  RESPONSE Data STS CRC
+#     PUT_IOWR_SHORT     HDR(16) Data CRC   ->  RESPONSE STS CRC
+#     PUT_MEMRD32_SHORT  HDR(32) CRC        ->  RESPONSE Data STS CRC
+#
+#   Figure 29, p.42, section 3.9 -- Posted Transaction
+#     PUT_MEMWR32_SHORT  HDR(32) Data CRC   ->  RESPONSE STS CRC
 #
 # Note what the read responses do NOT have: a completion header. Figure 24 on
 # p.38 gives the long form's response a full `HDR DATA` and Figure 26 gives the

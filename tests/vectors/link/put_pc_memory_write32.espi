@@ -24,3 +24,19 @@
 CMD 00 01 30 04 FE D4 00 00 DE AD BE EF 26
 TAR
 RSP 08 0F 01 95
+
+# The same write deferred. Section 3.9, p.42: "The valid responses for posted
+# transactions initiated by eSPI controller are ACCEPT, FATAL ERROR and
+# NON-FATAL ERROR. DEFER response for posted transaction is invalid."
+#
+# Every byte here is well formed -- right length, right CRC, every field in
+# place -- and the transaction is a target breaking the protocol. Nothing else
+# on the bus flags it, and no figure carries the rule: it is one sentence at
+# the top of a section whose figures all show ACCEPT.
+#
+# Memory Write 32 is the Posted row of Table 5, which is what makes this
+# checkable at all -- the decoder reads the command's Command Type column and
+# holds it across the turn-around.
+CMD 00 01 30 04 FE D4 00 00 DE AD BE EF 26
+TAR
+RSP 01 0F 01 AF

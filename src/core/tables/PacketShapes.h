@@ -43,6 +43,7 @@
 //  section 3, not guessed from the opcode's name. Four figures decide the
 //  peripheral rows below, and they do not all agree with the obvious reading:
 //
+//    --- section 3.8, Non-Posted Transaction ---
 //    Figure 24, p.38   PUT_NP HDR CRC      -> ACCEPT HDR DATA STS CRC
 //    Figure 25, p.39   PUT_NP HDR CRC      -> DEFER STS CRC
 //                      GET_PC CRC          -> ACCEPT HDR DATA STS CRC
@@ -51,6 +52,21 @@
 //                      PUT_MEMRD32_SHORT HDR CRC    -> RESPONSE Data STS CRC
 //    Figure 27, p.41   GET_NP CRC          -> ACCEPT HDR STS CRC
 //                      PUT_PC HDR DATA CRC -> ACCEPT STS CRC
+//
+//    --- section 3.9, Posted Transaction ---
+//    Figure 28, p.42   PUT_PC HDR DATA CRC -> ACCEPT STS CRC
+//    Figure 29, p.42   PUT_MEMWR32_SHORT HDR Data CRC -> RESPONSE STS CRC
+//    Figure 30, p.43   GET_PC CRC          -> ACCEPT HDR DATA STS CRC
+//
+//  THE POSTED FORMS ARE IN A DIFFERENT SECTION, which is easy to miss because
+//  Figure 27 already shows a PUT_PC and looks like the last word on it. It is
+//  not: PUT_PC is a posted transaction and its own section is 3.9. Figure 28
+//  agrees with Figure 27, and Figure 29 draws PUT_MEMWR32_SHORT -- the one
+//  short cycle Figure 26 leaves out, because it is the one that is posted.
+//
+//  Section 3.9 also states a rule no figure carries: "DEFER response for
+//  posted transaction is invalid" (p.42). The decoder raises that, because a
+//  deferred posted write decodes perfectly and is still a protocol violation.
 //
 //  Two things fall out of that which a row on its own would not tell you.
 //

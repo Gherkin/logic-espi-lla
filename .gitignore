@@ -3,6 +3,10 @@
 references/
 CLAUDE.md
 
+# Design, handoff and environment notes. Local working files, kept
+# deliberately out of the published repo.
+docs/
+
 # build output
 build/
 compile_commands.json

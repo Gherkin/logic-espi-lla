@@ -1,0 +1,79 @@
+Command
+  Opcode  0x0A  PUT_FLASH_NP
+  Cycle Type  0x02  Flash Erase
+    Command Type  Non-Posted
+    Direction  either direction
+  Tag  0x3
+  Length  0x001  erase block size, target attached 32 KB, controller attached 4 KB
+  Address  0x00100000
+  CRC  0x62  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok
+---
+Command
+  Opcode  0x0A  PUT_FLASH_NP
+  Cycle Type  0x01  Flash Write
+    Command Type  Non-Posted
+    Direction  either direction
+  Tag  0x4
+  Length  0x002  2 bytes
+  Address  0x00200000
+  Data  2 bytes  5A A5
+  CRC  0x1D  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok
+---
+Command
+  Opcode  0x0B  GET_FLASH_C
+  CRC  0x31  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Cycle Type  0x06  Successful Completion Without Data
+    Command Type  Completion
+    Direction  either direction
+  Tag  0x3
+  Length  0x000  driven to zero, as required
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x69  ok
+---
+Command
+  Opcode  0x0A  PUT_FLASH_NP
+  Cycle Type  0x02  Flash Erase
+    Command Type  Non-Posted
+    Direction  either direction
+  Tag  0x7
+  Length  0x007  erase block size, Reserved under both flash sharing schemes [!]
+  Address  0x00300000
+  CRC  0x1C  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok

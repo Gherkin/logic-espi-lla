@@ -24,6 +24,19 @@
 //           Table 6: "Message Codes", p.55
 //           Table 7: "LTR Message Field Description", p.57
 //           Figures 24-27, pp.38-41 -- which phase carries which packet
+//           Section 4.2.3 "OOB (Tunneled SMBus) Message Channel", pp.72-75
+//           Figure 45: "OOB (Tunneled SMBus) Message Packet Format", p.73
+//           Figure 46: "OOB MCTP Packet", p.74
+//           Figure 47: "OOB Generic SMBus Block Write Format", p.74
+//           Section 4.2.4 "Run-time Flash Access Channel", pp.75-83
+//           Figure 48: "Flash Access Request Packet Format", p.75
+//           Figure 49: "Flash Access Completion Packet Format", p.75
+//           Figure 50: "Flash Access RPMC Packet Format", p.76
+//           Section 4.2.4.1 "Controller Attached Flash Sharing", pp.77-79
+//           Section 4.2.4.2 "Target Attached Flash Sharing", pp.79-83
+//           Table 16: "eSPI Flash Access Channel Packet Format for Controller
+//                      Attached and Target Attached Flash Configurations", p.81
+//           Notes 1-3 to Table 16, p.82
 //
 //  A CYCLE TYPE BYTE MEANS NOTHING ON ITS OWN. Note 3 on p.49 is explicit:
 //  "The combination of command opcode and cycle type encoding must be unique.
@@ -64,11 +77,22 @@
 //  sit eight lines apart on two different pages and are otherwise identical;
 //  flattening them into one direction is the obvious mistake here.
 //
-//  NOT TRANSCRIBED YET, deliberately: the packet layouts behind the OOB
-//  (Figure 45) and flash (Figures 48 and 50) cycle types. Those are stage E.
-//  The encodings are transcribed here because Table 5 is one table and reading
-//  half of it twice is how a table drifts from the page; the layouts report as
-//  an explicit gap, which is a different answer from "not defined".
+//  TABLE 5 IS NOT THE ONLY TABLE OF FLASH CYCLE TYPES. Table 16 on p.81 lists
+//  the same encodings again with an Address Size and a Length column, and it is
+//  the only place either is stated for the RPMC rows. The two agree on every
+//  encoding, including the R1R0 field position -- which is a genuinely
+//  independent second reading of the row that carries the worst extraction
+//  hazard in the document.
+//
+//  They do not agree on everything. Table 16's last two rows describe
+//  "05h, 07h, 09h-2Fh" and "30h-3Fh" as Reserved, and 09h-0Fh is where Table 5
+//  puts the flash completions -- 00001P1P0 1 and 00001P1P0 0 cover 08h-0Fh.
+//  Table 16 conspicuously omits 06h and 08h from its reserved list, which only
+//  makes sense if its rows are flash *commands* and completions are out of its
+//  scope; but then 09h-0Fh should have been omitted too. Table 5 is treated as
+//  the authority on cycle types here and the disagreement is recorded rather
+//  than resolved, because resolving it would mean choosing which of two printed
+//  tables to disbelieve.
 // ---------------------------------------------------------------------------
 
 // X( NAME, ENCODING, MASK, CHANNEL, DIRECTION, COMMAND_TYPE, LAYOUT, VARIABLE )
@@ -86,7 +110,9 @@
 //
 // LAYOUT names the packet format figure the row points at. NotTranscribed is
 // a row whose figure nobody has read yet -- the decoder reports the cycle type
-// and stops rather than inventing a header length.
+// and stops rather than inventing a header length. No row carries it now that
+// the OOB and flash figures have been read; the value is kept because it is
+// the mechanism that keeps a future gap a gap instead of a guess.
 #define ESPI_CYCLE_TYPE_TABLE( X )                                                                                                 \
     /* --- eSPI Peripheral Channel, Table 5 pp.47-48 --- */                                                                        \
     X( "Memory Read 32", 0x00, 0xFF, Peripheral, UpOrDown, NonPosted, MemoryRead32, None )                                         \
@@ -99,17 +125,19 @@
     X( "Successful Completion With Data", 0x09, 0xF9, Peripheral, UpOrDown, Completion, CompletionWithData, SplitCompletion )      \
     X( "Message", 0x10, 0xF1, Peripheral, UpOrDown, Posted, Message, MessageRouting )                                              \
     X( "Message with Data", 0x11, 0xF1, Peripheral, UpOrDown, Posted, MessageWithData, MessageRouting )                            \
-    /* --- OOB Message Channel, Table 5 p.48. Figure 45 is stage E. --- */                                                         \
-    X( "OOB (Tunneled SMBus) Message", 0x21, 0xFF, Oob, UpOrDown, Posted, NotTranscribed, None )                                   \
-    /* --- Flash Access Channel, Table 5 pp.48-49. Figures 48 and 50 are stage E. --- */                                           \
-    X( "Flash Read", 0x00, 0xFF, Flash, UpOrDown, NonPosted, NotTranscribed, None )                                                \
-    X( "Flash Write", 0x01, 0xFF, Flash, UpOrDown, NonPosted, NotTranscribed, None )                                               \
-    X( "Flash Erase", 0x02, 0xFF, Flash, UpOrDown, NonPosted, NotTranscribed, None )                                               \
-    X( "RPMC Op.1", 0x03, 0x9F, Flash, Down, NonPosted, NotTranscribed, RpmcTarget )                                               \
-    X( "RPMC Op.2", 0x04, 0x9F, Flash, Down, NonPosted, NotTranscribed, RpmcTarget )                                               \
-    X( "Successful Completion Without Data", 0x06, 0xFF, Flash, UpOrDown, Completion, NotTranscribed, None )                       \
-    X( "Unsuccessful Completion Without Data", 0x08, 0xF9, Flash, UpOrDown, Completion, NotTranscribed, SplitCompletion )          \
-    X( "Successful Completion With Data", 0x09, 0xF9, Flash, UpOrDown, Completion, NotTranscribed, SplitCompletion )
+    /* --- OOB Message Channel, Table 5 p.48. Figure 45, p.73. --- */                                                              \
+    X( "OOB (Tunneled SMBus) Message", 0x21, 0xFF, Oob, UpOrDown, Posted, OobMessage, None )                                       \
+    /* --- Flash Access Channel, Table 5 pp.48-49. Figures 48-50, pp.75-76. --- */                                                 \
+    X( "Flash Read", 0x00, 0xFF, Flash, UpOrDown, NonPosted, FlashRead, None )                                                     \
+    X( "Flash Write", 0x01, 0xFF, Flash, UpOrDown, NonPosted, FlashWrite, None )                                                   \
+    X( "Flash Erase", 0x02, 0xFF, Flash, UpOrDown, NonPosted, FlashErase, None )                                                   \
+    X( "RPMC Op.1", 0x03, 0x9F, Flash, Down, NonPosted, FlashRpmcOp1, RpmcTarget )                                                 \
+    X( "RPMC Op.2", 0x04, 0x9F, Flash, Down, NonPosted, FlashRpmcOp2, RpmcTarget )                                                 \
+    X( "Successful Completion Without Data", 0x06, 0xFF, Flash, UpOrDown, Completion, FlashCompletionWithoutData, None )           \
+    X( "Unsuccessful Completion Without Data", 0x08, 0xF9, Flash, UpOrDown, Completion, FlashCompletionWithoutData,                \
+       SplitCompletion )                                                                                                           \
+    X( "Successful Completion With Data", 0x09, 0xF9, Flash, UpOrDown, Completion, FlashCompletionWithData,                        \
+       SplitCompletion )
 
 // ---------------------------------------------------------------------------
 //  NOTE 1, p.49 -- the split completion field P1P0.
@@ -179,10 +207,11 @@
 #define ESPI_CYCLE_RPMC_TARGET_MASK 0x3u
 
 // ---------------------------------------------------------------------------
-//  PACKET HEADER LAYOUTS -- Figures 34, 36, 38 and 39, pp.53-55.
+//  PACKET HEADER LAYOUTS -- Figures 34, 36, 38 and 39, pp.53-55 (peripheral),
+//  Figure 45, p.73 (OOB), and Figures 48, 49 and 50, pp.75-76 (flash).
 //
 //  X( LAYOUT, FIGURE, HEADER_BYTES, ADDRESS_BYTES, HAS_MESSAGE_CODE,
-//     HAS_PAYLOAD, LENGTH )
+//     HAS_PAYLOAD, LENGTH, PAYLOAD )
 //
 //  Every one of these headers opens the same way (Figure 33, p.46):
 //
@@ -199,7 +228,8 @@
 //  HAS_PAYLOAD is whether data bytes follow the header, which is the LSB rule
 //  from section 4.1.1 seen from the other side. Note that a Memory Read
 //  request has a meaningful Length and no payload: the length is the size
-//  being *asked for*, and the bytes come back in a completion later.
+//  being *asked for*, and the bytes come back in a completion later. Flash Read
+//  and RPMC Op.2 are the flash channel's two instances of the same thing.
 //
 //  LENGTH is where section 4.1.3, pp.50-51, earns its place -- Table 5 and the
 //  figures between them say nothing about how to read the field:
@@ -207,7 +237,8 @@
 //    OneBased    "The length field is 1-based. A value of all zeros indicates
 //                4 KB of length." So 000h is 4096 bytes, not zero. A decoder
 //                that prints "0 bytes" here is wrong in the single most common
-//                case, and nothing in the packet contradicts it.
+//                case, and nothing in the packet contradicts it. Table 16
+//                note 3, p.82, restates it for the flash channel.
 //    MustBeZero  "For Completion without Data or Un-Successful Completion, the
 //                length field must be driven to zeros by initiator. The
 //                receiver must ignore the length field." The 4 KB reading does
@@ -215,16 +246,65 @@
 //    Reserved    "For Message cycle type, the Length field is Reserved and it
 //                must be sent with all 0s" (p.55). Message carries no payload,
 //                so there is nothing for a length to count.
+//    BlockErase  Flash Erase only. Not a byte count at all -- see the erase
+//                size table below. Section 4.1.3 does not state this; it
+//                forwards to 4.2.4.1 and 4.2.4.2.
+//
+//                Following the cross-reference the table itself gives you does
+//                not help, which is what makes this sharp. Table 5's Flash
+//                Erase row ends "Refer to Figure 48 for the packet format",
+//                exactly as Flash Read and Flash Write do. Figure 48 then
+//                draws Flash Erase sharing the read's header, Length field and
+//                all, and says nothing whatever about erase sizes. So a reader
+//                who follows Table 5 to its own named figure sees a Length
+//                field with no hint that it is not a byte count, and never
+//                reaches Table 16.
+//
+//  PAYLOAD says whether the data bytes after the header have a transcribed
+//  structure. It is a column rather than something the decoder infers from the
+//  layout name, for the same reason the message code table has a FIELDS column:
+//  matching on a name would make a rename silently change what the decoder
+//  does.
+//
+//    Opaque       data bytes, no structure this document gives
+//    SmbusPacket  Figure 45, p.73 -- the tunneled SMBus block write
+//    RpmcOpcode   Figure 50, p.76 -- data byte 0 is the RPMC OP1 opcode
+//
+//  ONE THING FIGURE 50 NAMES THAT IS NOT DECODABLE HERE. It draws data byte 0
+//  of an RPMC OP2 *completion* as "Extended Status". That completion carries
+//  the ordinary Successful Completion With Data cycle type, shared with every
+//  other flash read completion, so nothing in the packet says the request it
+//  answers was an RPMC OP2. Naming the byte would take matching the Tag against
+//  an earlier transaction, which is L2 state this layer does not have. Recorded
+//  rather than guessed.
+//
+//  FLASH COMPLETIONS GET THEIR OWN ROWS even though Figure 49 draws exactly
+//  what Figure 39 draws, and section 4.2.4 says so in prose: "The Flash Access
+//  channel uses the same packet format as the eSPI Peripheral Channel
+//  transactions" (p.75). Two rows rather than one shared row because a row here
+//  is meant to be checkable against one figure cell in seconds, and because
+//  Table 5 note 2's P1 rule then has to be stated as applying to both.
 // ---------------------------------------------------------------------------
 #define ESPI_CYCLE_HEADER_LAYOUT_TABLE( X )                                                                                        \
-    X( MemoryRead32, "Figure 36, p.54", 7, 4, false, false, OneBased )                                                             \
-    X( MemoryRead64, "Figure 36, p.54", 11, 8, false, false, OneBased )                                                            \
-    X( MemoryWrite32, "Figure 34, p.53", 7, 4, false, true, OneBased )                                                             \
-    X( MemoryWrite64, "Figure 34, p.53", 11, 8, false, true, OneBased )                                                            \
-    X( Message, "Figure 38, p.54", 8, 0, true, false, Reserved )                                                                   \
-    X( MessageWithData, "Figure 38, p.54", 8, 0, true, true, OneBased )                                                            \
-    X( CompletionWithData, "Figure 39, p.55", 3, 0, false, true, OneBased )                                                        \
-    X( CompletionWithoutData, "Figure 39, p.55", 3, 0, false, false, MustBeZero )
+    /* --- eSPI Peripheral Channel --- */                                                                                          \
+    X( MemoryRead32, "Figure 36, p.54", 7, 4, false, false, OneBased, Opaque )                                                     \
+    X( MemoryRead64, "Figure 36, p.54", 11, 8, false, false, OneBased, Opaque )                                                    \
+    X( MemoryWrite32, "Figure 34, p.53", 7, 4, false, true, OneBased, Opaque )                                                     \
+    X( MemoryWrite64, "Figure 34, p.53", 11, 8, false, true, OneBased, Opaque )                                                    \
+    X( Message, "Figure 38, p.54", 8, 0, true, false, Reserved, Opaque )                                                           \
+    X( MessageWithData, "Figure 38, p.54", 8, 0, true, true, OneBased, Opaque )                                                    \
+    X( CompletionWithData, "Figure 39, p.55", 3, 0, false, true, OneBased, Opaque )                                                \
+    X( CompletionWithoutData, "Figure 39, p.55", 3, 0, false, false, MustBeZero, Opaque )                                          \
+    /* --- OOB Message Channel --- */                                                                                              \
+    X( OobMessage, "Figure 45, p.73", 3, 0, false, true, OneBased, SmbusPacket )                                                   \
+    /* --- Flash Access Channel --- */                                                                                             \
+    X( FlashRead, "Figure 48, p.75", 7, 4, false, false, OneBased, Opaque )                                                        \
+    X( FlashWrite, "Figure 48, p.75", 7, 4, false, true, OneBased, Opaque )                                                        \
+    X( FlashErase, "Figure 48, p.75", 7, 4, false, false, BlockErase, Opaque )                                                     \
+    X( FlashRpmcOp1, "Figure 50, p.76", 3, 0, false, true, OneBased, RpmcOpcode )                                                  \
+    X( FlashRpmcOp2, "Figure 50, p.76", 3, 0, false, false, OneBased, Opaque )                                                     \
+    X( FlashCompletionWithData, "Figure 49, p.75", 3, 0, false, true, OneBased, Opaque )                                           \
+    X( FlashCompletionWithoutData, "Figure 49, p.75", 3, 0, false, false, MustBeZero, Opaque )
 
 // The Tag and Length split of byte 1, and the width of the whole Length field.
 // Section 4.1.2, p.50: "The 4-bit Tag field allows up to 16 unique non-posted
@@ -321,5 +401,192 @@
     X( 0x3, 32768u, "32,768 ns" )                                                                                                  \
     X( 0x4, 1048576u, "1,048,576 ns" )                                                                                             \
     X( 0x5, 33554432u, "33,554,432 ns" )
+
+// ---------------------------------------------------------------------------
+//  FLASH ERASE BLOCK SIZES -- Table 16, p.81, the Length column of the 02h row.
+//
+//  X( ENCODING, TARGET_ATTACHED, CONTROLLER_ATTACHED )
+//
+//  THE SAME LENGTH FIELD MEANS TWO DIFFERENT THINGS, and which one is not on
+//  the bus. Table 16 prints two separate lists under one cell, one for each
+//  flash sharing scheme, and they disagree on every encoding except 2h:
+//
+//      encoding   Target Attached      Controller Attached
+//      0h         4 KB                 Reserved
+//      1h         32 KB                4 KB
+//      2h         64 KB                64 KB
+//      3h         128 KB               Reserved
+//      4h         Reserved             128 KB
+//      5h         Reserved             256 KB
+//      6h-FFFh    Reserved             Reserved
+//      (4h-FFFh Reserved on the Target Attached side)
+//
+//  A length of 1h is 32 KB on one scheme and 4 KB on the other. Nothing in the
+//  packet says which scheme is in operation -- it is the Flash Sharing Mode bit
+//  of configuration register 040h (bit 11, p.102), set before the channel is
+//  enabled, and the two schemes are "mutually exclusive for a given eSPI
+//  interface" (4.2.4.2, p.79). So the honest decode names both readings, the
+//  same answer the General-Purpose I/O Expander direction gets: the
+//  specification is not silent, it says the value varies.
+//
+//  An empty string is Table 16 printing "Reserved" in that column, which is a
+//  statement rather than a gap. Encodings above 5h appear in neither column and
+//  are Reserved in both.
+//
+//  NOTHING IN TABLE 5 SENDS A READER HERE. Its Flash Erase row ends "Refer to
+//  Figure 48 for the packet format" and that is the only cross-reference it
+//  offers -- the same sentence Flash Read and Flash Write carry, pointing at a
+//  figure that draws the Length field and defines nothing about it. Table 16 is
+//  reachable only from section 4.2.4.2.1 or by reading section 4.1.3's
+//  forwarding sentence and following it. A transcription that stopped at
+//  Table 5 and its named figure would be complete by its own lights.
+//
+//  (That sentence is also missing from extracted text: the chunk store's copy
+//  of the Flash Erase cell ends at "corresponding flash controller" and drops
+//  the figure reference, while keeping it on the Flash Read and Flash Write
+//  rows. A wrapped table cell losing its last line is a new shape of the
+//  extraction hazard -- the earlier ones mangled values, this one deletes a
+//  sentence and leaves a plausible cell behind.)
+//
+//  SECTION 4.2.4.1 SAYS IT SLIGHTLY DIFFERENTLY, p.78: "the least significant
+//  3 bits of the length field specifies the size of the block to be erased. The
+//  encoding of the least significant 3 bits of the length field matches the
+//  value of the Flash Block Erase Size field of the Channel Capabilities and
+//  Configuration register." Table 16 gives the whole 12-bit field instead and
+//  reserves everything above the defined values, which is the stricter reading
+//  and is what is transcribed. The same page adds "length field encoding of
+//  '011' is not applicable for Flash Erase in Controller Attached Flash
+//  Sharing", which is Table 16's 3h: Reserved cell said twice.
+//
+//  That 011b is worth a second look rather than a shrug. Register 040h bits
+//  4:2 give 011b as "Both 4 Kbytes and 64 Kbytes are supported" -- a statement
+//  about what the device can do, not a size a single erase request could name.
+//  So the two are consistent: a capability of "both" is not a request length.
+// ---------------------------------------------------------------------------
+#define ESPI_FLASH_ERASE_SIZE_TABLE( X )                                                                                           \
+    X( 0x0, "4 KB", "" )                                                                                                           \
+    X( 0x1, "32 KB", "4 KB" )                                                                                                      \
+    X( 0x2, "64 KB", "64 KB" )                                                                                                     \
+    X( 0x3, "128 KB", "" )                                                                                                         \
+    X( 0x4, "", "128 KB" )                                                                                                         \
+    X( 0x5, "", "256 KB" )
+
+// ---------------------------------------------------------------------------
+//  OOB TUNNELED SMBUS PACKET -- Figure 45, p.73, and section 4.2.3, pp.72-75.
+//
+//  The OOB header is the ordinary three bytes and every SMBus field is *data*.
+//  Figure 45's brace is explicit about it: Header spans bytes 0-2, Data spans
+//  byte 3 to the end. Section 4.2.3 p.73 says the same in prose -- "The SMBus
+//  Target Address, SMBus Command Opcode, SMBus Byte Count, SMBus Data fields
+//  and the optional PEC byte are sent as data within the eSPI OOB message
+//  packet."
+//
+//      Byte 3   SMBus Target Address [7:1] | 0 [0]
+//      Byte 4   SMBus Command Opcode
+//      Byte 5   SMBus Byte Count
+//      Byte 6   SMBus Data Byte 0
+//      ...
+//      Byte n+6 SMBus Data Byte n
+//      Byte n+7 PEC          <- drawn with a dashed border: optional
+//
+//  BIT 0 OF BYTE 3 IS DRAWN AS A LITERAL '0', in its own narrow cell against
+//  the 7..0 bit ruler, not as a field. That is the SMBus read/write bit on a
+//  block write. Figure 46 draws the same cell as a literal '1' on the MCTP
+//  Source Target Address byte, which is what makes it clear the cell is a bit
+//  and not part of the address.
+//
+//  WHETHER THERE IS A PEC BYTE IS ARITHMETIC, NOT A FLAG. Section 4.2.3, p.73:
+//  "The presence of SMBus PEC is determined through a simple arithmetic
+//  operation between the eSPI OOB header length field and the SMBus Byte
+//  Count." The two sentences that make it computable are on the same page:
+//
+//    "The SMBus Byte Count field does not include the PEC byte. It comprehends
+//     the actual payload of the SMBus block write packet itself excluding the
+//     3 SMBus header bytes."
+//    "The Length field of the OOB message comprehends the count by the SMBus
+//     Byte Count field, in addition to the 3 header bytes (i.e. SMBus Target
+//     Address, SMBus Command Opcode and SMBus Byte Count) and an optional PEC
+//     byte."
+//
+//  so Length = 3 + ByteCount + (PEC ? 1 : 0), and PEC = Length - 3 - ByteCount
+//  which must come out 0 or 1. Figures 46 and 47 work the arithmetic twice on
+//  the page: (3+5+64+1) = 73 with ByteCount 69 for MCTP, and (3+64+1) = 68 with
+//  ByteCount 64 for a generic block write.
+//
+//  Any other difference is a malformed packet -- and it is one that decodes
+//  perfectly otherwise, because the OOB Length alone says how many bytes to
+//  read. Nothing else on the bus notices.
+// ---------------------------------------------------------------------------
+
+// Bytes 3, 4 and 5 -- the SMBus header, counted as part of the OOB Length.
+#define ESPI_OOB_SMBUS_HEADER_BYTES 3u
+#define ESPI_OOB_SMBUS_ADDRESS_SHIFT 1u
+#define ESPI_OOB_SMBUS_ADDRESS_MASK 0x7Fu
+// Figure 45: byte 3 bit 0 is drawn as the literal '0'.
+#define ESPI_OOB_SMBUS_ADDRESS_BIT0_MASK 0x01u
+#define ESPI_OOB_SMBUS_ADDRESS_BIT0_EXPECTED 0u
+
+// ---------------------------------------------------------------------------
+//  TABLE OF SMBUS COMMAND OPCODES THIS DOCUMENT NAMES -- section 4.2.3, p.73,
+//  and Figure 46, p.74.
+//
+//  X( CODE, NAME, HEADER_BYTES )
+//
+//  One row, for the same reason Table 6 has one row: the base specification
+//  names exactly one. "MCTP over SMBus is a specific form of the SMBus block
+//  write packet with the SMBus Command Opcode of 0Fh (i.e. MCTP)" (p.73), and
+//  Figure 46 draws it with the cell reading "Command Code = MCTP = 0Fh".
+//
+//  HEADER_BYTES is how many of the SMBus data bytes the embedded protocol
+//  spends on its own header before its payload starts. Figure 46's right hand
+//  brace labels it "MCTP Header (5 bytes)" and its worked example is
+//  ByteCount = (5+64) = 69, so the count includes the header and the MPS does
+//  not: "the Maximum Payload Size (MPS) applies to the MCTP payload itself
+//  excluding the MCTP header and the optional PEC byte" (p.73).
+// ---------------------------------------------------------------------------
+#define ESPI_OOB_SMBUS_COMMAND_TABLE( X ) X( 0x0F, "MCTP", 5 )
+
+// ---------------------------------------------------------------------------
+//  MCTP HEADER -- Figure 46, p.74, the five bytes at packet offsets 6 to 10.
+//
+//  X( BYTE, HIGH, LOW, NAME )
+//
+//  BYTE is the offset within the MCTP header, so 0 here is packet byte 6.
+//
+//  EXTRACTION HAZARD OF A NEW KIND, and the reason this block is called out
+//  separately in the QC sheet. Every other bit range in this repository was
+//  read from a printed bit number -- "Length[11:8]", "Address[31:24]", a Table
+//  4 row saying "bit 3". Figure 46's byte 10 prints no bit numbers at all: it
+//  draws five cells side by side, labelled SOM, EOM, Packet Seq#, TO and
+//  Message Tag, and the only statement of their widths is where the cell
+//  borders fall against the 7|6|5|4|3|2|1|0 ruler at the top of the column.
+//  The ranges below are read off those borders. That is weaker evidence than
+//  anything else here and it is marked as such rather than blended in.
+//
+//  Byte 7's split is the same kind of reading but a much easier one: two cells
+//  of visibly equal width, so [7:4] and [3:0].
+//
+//  THE FIELD NAMES ARE eSPI'S; THE MEANINGS ARE NOT. Figure 46 labels these
+//  cells and says nothing about what any value means -- MCTP is defined by
+//  DSP0237, which is not in this database. So the decoder prints the name and
+//  the number and stops. It does not, for instance, claim to know what a
+//  Message Tag of 2 signifies, because this document never says.
+// ---------------------------------------------------------------------------
+
+#define ESPI_OOB_MCTP_SOURCE_BIT0_MASK 0x01u
+// Figure 46: the Source Target Address byte's bit 0 is drawn as the literal '1'.
+#define ESPI_OOB_MCTP_SOURCE_BIT0_EXPECTED 1u
+
+#define ESPI_OOB_MCTP_HEADER_TABLE( X )                                                                                            \
+    X( 0, 7, 1, "Source Target Address" )                                                                                          \
+    X( 1, 7, 4, "MCTP Reserved" )                                                                                                  \
+    X( 1, 3, 0, "Header Version" )                                                                                                 \
+    X( 2, 7, 0, "Destination Endpoint ID" )                                                                                        \
+    X( 3, 7, 0, "Source Endpoint ID" )                                                                                             \
+    X( 4, 7, 7, "SOM" )                                                                                                            \
+    X( 4, 6, 6, "EOM" )                                                                                                            \
+    X( 4, 5, 4, "Packet Seq#" )                                                                                                    \
+    X( 4, 3, 3, "TO" )                                                                                                             \
+    X( 4, 2, 0, "Message Tag" )
 
 #endif // ESPI_TABLE_CYCLE_TYPES_H

@@ -12,6 +12,9 @@
 //           6.2.1.5 Offset 20h: Channel 1 Capabilities and Configurations, p.99
 //           6.2.1.6 Offset 30h: Channel 2 Capabilities and Configurations, p.100
 //           6.2.1.7 Offset 40h: Channel 3 Capabilities and Configurations, pp.101-103
+//           6.2.1.8 Offset 44h: Channel 3 Capabilities and Configurations 2, pp.104-105
+//           6.2.1.9 Offset 48h: Channel 3 Capabilities and Configurations 3, p.106
+//           6.2.1.10 Offset 4Ch: Channel 3 Capabilities and Configurations 4, p.106
 //
 //  ADDRESSING -- three separate rules, §3.7 pp.37-38, and they are not the
 //  same rule stated three ways:
@@ -37,10 +40,13 @@
 //  transcribed below, reserved rows included, so it can be checked against the
 //  page row for row. Only ranges marked as decoded have a field layout.
 //
-//  NOT TRANSCRIBED YET, deliberately: Channel 3 Capabilities and
-//  Configurations 2, 3 and 4 at 044h, 048h and 04Ch. They carry RPMC detail
-//  for the 2nd-4th flash devices and belong with the flash channel work. They
-//  are named in the map but have no field layout, so they report as a gap.
+//  044h, 048h AND 04Ch ARE NEW IN REVISION 1.6. The revision history on p.8
+//  lists "Fixed the table of Target Registers to include registers at offset
+//  44h, 48h and 4Ch" against March 2025, and the RPMC content itself arrived in
+//  1.5 as "ECN- Target Attached Flash RPMC". Every field in all three is RO,
+//  and every one that carries information is HwInit -- they are entirely a
+//  description of what flash hardware sits behind the target, so none of them
+//  contributes to the reset state.
 //
 //  WHY THE ENABLE AND READY BITS MATTER TO THE DECODER ITSELF. This is not
 //  just labelling: a SET_CONFIGURATION to offset 08h that is accepted changes
@@ -73,9 +79,9 @@
     X( 0x030, 0x033, "Channel 2 Capabilities and Configurations", Fields )                                                         \
     X( 0x034, 0x03F, "Reserved", Reserved )                                                                                        \
     X( 0x040, 0x043, "Channel 3 Capabilities and Configurations", Fields )                                                         \
-    X( 0x044, 0x047, "Channel 3 Capabilities and Configurations 2", NoFields )                                                     \
-    X( 0x048, 0x04B, "Channel 3 Capabilities and Configurations 3", NoFields )                                                     \
-    X( 0x04C, 0x04F, "Channel 3 Capabilities and Configurations 4", NoFields )                                                     \
+    X( 0x044, 0x047, "Channel 3 Capabilities and Configurations 2", Fields )                                                       \
+    X( 0x048, 0x04B, "Channel 3 Capabilities and Configurations 3", Fields )                                                       \
+    X( 0x04C, 0x04F, "Channel 3 Capabilities and Configurations 4", Fields )                                                       \
     X( 0x050, 0x7FF, "Reserved", Reserved )                                                                                        \
     X( 0x800, 0xFFF, "Platform Specific registers", Reserved )
 
@@ -143,6 +149,24 @@
     /* --- Flash Sharing Mode, offset 40h bit 11, p.102 --- */                                                                     \
     X( FlashSharingMode, 0x0, "controller attached flash sharing" )                                                                \
     X( FlashSharingMode, 0x1, "target attached flash sharing" )                                                                    \
+    /* --- Number of Target Attached Flash RPMC flash devices, 44h bits 23:22, p.104 --- */                                        \
+    X( RpmcDeviceCount, 0x0, "1 RPMC flash device" )                                                                               \
+    X( RpmcDeviceCount, 0x1, "2 RPMC flash devices" )                                                                              \
+    X( RpmcDeviceCount, 0x2, "3 RPMC flash devices" )                                                                              \
+    X( RpmcDeviceCount, 0x3, "4 RPMC flash devices" )                                                                              \
+    /* --- Target Maximum Read Request Size Supported, 44h bits 2:0, p.105.                                                        \
+       NOT the MaxReadRequest encoding above, which is the one every other read                                                    \
+       request field in the map uses. There 000b is Reserved; here 000b and                                                        \
+       001b BOTH mean 64 bytes and no encoding is reserved. Reusing the other                                                      \
+       table would print "Reserved" for a perfectly legal advertisement. --- */                                                    \
+    X( TargetMaxReadRequest, 0x0, "64 bytes" )                                                                                     \
+    X( TargetMaxReadRequest, 0x1, "64 bytes" )                                                                                     \
+    X( TargetMaxReadRequest, 0x2, "128 bytes" )                                                                                    \
+    X( TargetMaxReadRequest, 0x3, "256 bytes" )                                                                                    \
+    X( TargetMaxReadRequest, 0x4, "512 bytes" )                                                                                    \
+    X( TargetMaxReadRequest, 0x5, "1024 bytes" )                                                                                   \
+    X( TargetMaxReadRequest, 0x6, "2048 bytes" )                                                                                   \
+    X( TargetMaxReadRequest, 0x7, "4096 bytes" )                                                                                   \
     /* --- Maximum WAIT STATE Allowed, offset 08h bits 15:12, p.96.                                                                \
        "This is a 1-based field in the granularity of byte time. When '0', it                                                      \
        indicates a value of 16 byte time." So zero is the largest value here,                                                      \
@@ -254,7 +278,27 @@
     X( 0x040, 7, 5, "Flash Access Channel Maximum Payload Size Supported", MaxPayload, false, RO, HwInit, 0 )                      \
     X( 0x040, 4, 2, "Flash Block Erase Size", FlashBlockErase, false, RW, Value, 1 )                                               \
     X( 0x040, 1, 1, "Flash Access Channel Ready", None, false, RO, Value, 0 )                                                      \
-    X( 0x040, 0, 0, "Flash Access Channel Enable", None, false, RW, Value, 0 )
+    X( 0x040, 0, 0, "Flash Access Channel Enable", None, false, RW, Value, 0 )                                                     \
+    /* --- 044h Channel 3 Capabilities and Configurations 2, pp.104-105 --- */                                                     \
+    X( 0x044, 31, 24, "Reserved", None, false, RO, Value, 0 )                                                                      \
+    X( 0x044, 23, 22, "Number of Target Attached Flash RPMC flash devices", RpmcDeviceCount, false, RO, HwInit, 0 )                \
+    X( 0x044, 21, 16, "Target RPMC Supported", None, false, RO, HwInit, 0 )                                                        \
+    X( 0x044, 15, 8, "Target Flash Erase Block Size", None, false, RO, HwInit, 0 )                                                 \
+    X( 0x044, 7, 3, "Reserved", None, false, RO, Value, 0 )                                                                        \
+    X( 0x044, 2, 0, "Target Maximum Read Request Size Supported", TargetMaxReadRequest, false, RO, HwInit, 0 )                     \
+    /* --- 048h Channel 3 Capabilities and Configurations 3, p.106 --- */                                                          \
+    X( 0x048, 31, 24, "RPMC OP1 Opcode on the 2nd RPMC Flash device", None, false, RO, HwInit, 0 )                                 \
+    X( 0x048, 23, 20, "RPMC Counter on the 2nd RPMC Flash device", None, true, RO, HwInit, 0 )                                     \
+    X( 0x048, 19, 0, "Reserved", None, false, RO, Value, 0 )                                                                       \
+    /* --- 04Ch Channel 3 Capabilities and Configurations 4, p.106.                                                                \
+       The 4th device is in the high half and the 3rd in the low half, which is                                                    \
+       the order the page prints them in and not the order a reader expects. --- */                                                \
+    X( 0x04C, 31, 24, "RPMC OP1 Opcode on the 4th RPMC Flash device", None, false, RO, HwInit, 0 )                                 \
+    X( 0x04C, 23, 20, "RPMC Counter on the 4th RPMC Flash device", None, true, RO, HwInit, 0 )                                     \
+    X( 0x04C, 19, 16, "Reserved", None, false, RO, Value, 0 )                                                                      \
+    X( 0x04C, 15, 8, "RPMC OP1 Opcode on the 3rd RPMC Flash device", None, false, RO, HwInit, 0 )                                  \
+    X( 0x04C, 7, 4, "RPMC Counter on the 3rd RPMC Flash device", None, true, RO, HwInit, 0 )                                       \
+    X( 0x04C, 3, 0, "Reserved", None, false, RO, Value, 0 )
 
 // ---------------------------------------------------------------------------
 //  CHANNEL SUPPORTED -- offset 08h bits 7:0, p.96.
@@ -273,6 +317,37 @@
 // Bits 7:4 are "Reserved for platform specific channels" (p.96), so they are
 // not an error when set -- only unnamed.
 #define ESPI_CHANNEL_SUPPORTED_PLATFORM_MASK 0xF0u
+
+// ---------------------------------------------------------------------------
+//  TARGET FLASH ERASE BLOCK SIZE -- offset 44h bits 15:8, p.105.
+//
+//  The second bit field in the map, and the only other field that has to be
+//  rendered a bit at a time: "This field indicates the size of the erase
+//  commands the controller can issue. If multiple bits are set then the
+//  controller is allowed to issue an erase using any of the indicated sizes."
+//
+//  X( BIT, NAME )   -- BIT is numbered within the field, so bit 0 is register
+//                      bit 8.
+//
+//  IT IS NOT THE SAME THING AS THE FLASH BLOCK ERASE SIZE FIELD at 040h bits
+//  4:2, however similar the names look. That one is an encoded value the
+//  controller writes to pick a size; this one is a capability mask the target
+//  advertises, and the bit positions are not the encodings. The page reserves
+//  bits 0, 1, 3 and 4 -- a gap in the middle that no encoded field would have.
+//
+//  "This field is only applicable when target attached flash sharing scheme is
+//  selected" (p.105).
+// ---------------------------------------------------------------------------
+
+// X( BIT, NAME )
+#define ESPI_TARGET_ERASE_BLOCK_TABLE( X )                                                                                         \
+    X( 2, "4 Kbytes" )                                                                                                             \
+    X( 5, "32 Kbytes" )                                                                                                            \
+    X( 6, "64 Kbytes" )                                                                                                            \
+    X( 7, "128 Kbytes" )
+
+// Bits 0, 1, 3 and 4 of the field are printed as Reserved on p.105.
+#define ESPI_TARGET_ERASE_BLOCK_RESERVED_MASK 0x1Bu
 
 // The three addressing rules from §3.7, pp.37-38. See the banner above for why
 // the upper bits are reported rather than masked away.

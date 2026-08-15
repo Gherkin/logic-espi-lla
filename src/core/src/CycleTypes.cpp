@@ -22,12 +22,33 @@ struct LayoutEntry
     bool has_message_code;
     bool has_payload;
     CycleLength length;
+    CyclePayload payload;
 };
 
-#define ESPI_CYCLE_LAYOUT_ENTRY( LAYOUT, FIGURE, HEADER_BYTES, ADDRESS_BYTES, HAS_MESSAGE_CODE, HAS_PAYLOAD, LENGTH )               \
-    LayoutEntry{ CycleLayout::LAYOUT, FIGURE, HEADER_BYTES, ADDRESS_BYTES, HAS_MESSAGE_CODE, HAS_PAYLOAD, CycleLength::LENGTH },
+#define ESPI_CYCLE_LAYOUT_ENTRY( LAYOUT, FIGURE, HEADER_BYTES, ADDRESS_BYTES, HAS_MESSAGE_CODE, HAS_PAYLOAD, LENGTH, PAYLOAD )      \
+    LayoutEntry{ CycleLayout::LAYOUT,   FIGURE, HEADER_BYTES,  ADDRESS_BYTES,  HAS_MESSAGE_CODE, HAS_PAYLOAD,                       \
+                 CycleLength::LENGTH, CyclePayload::PAYLOAD },
 const LayoutEntry kLayouts[] = { ESPI_CYCLE_HEADER_LAYOUT_TABLE( ESPI_CYCLE_LAYOUT_ENTRY ) };
 #undef ESPI_CYCLE_LAYOUT_ENTRY
+
+struct EraseSizeEntry
+{
+    uint16_t encoding;
+    const char* target_attached;
+    const char* controller_attached;
+};
+
+#define ESPI_ERASE_SIZE_ENTRY( ENCODING, TARGET, CONTROLLER ) EraseSizeEntry{ ENCODING, TARGET, CONTROLLER },
+const EraseSizeEntry kEraseSizes[] = { ESPI_FLASH_ERASE_SIZE_TABLE( ESPI_ERASE_SIZE_ENTRY ) };
+#undef ESPI_ERASE_SIZE_ENTRY
+
+#define ESPI_SMBUS_COMMAND_ENTRY( CODE, NAME, HEADER_BYTES ) SmbusCommandInfo{ CODE, NAME, HEADER_BYTES },
+const SmbusCommandInfo kSmbusCommands[] = { ESPI_OOB_SMBUS_COMMAND_TABLE( ESPI_SMBUS_COMMAND_ENTRY ) };
+#undef ESPI_SMBUS_COMMAND_ENTRY
+
+#define ESPI_MCTP_FIELD_ENTRY( BYTE, HIGH, LOW, NAME ) MctpHeaderField{ BYTE, HIGH, LOW, NAME, 0 },
+const MctpHeaderField kMctpFields[] = { ESPI_OOB_MCTP_HEADER_TABLE( ESPI_MCTP_FIELD_ENTRY ) };
+#undef ESPI_MCTP_FIELD_ENTRY
 
 struct CodedText
 {
@@ -150,9 +171,14 @@ bool SplitCompletionViolatesNote2( const CycleTypeInfo& info, uint8_t cycle_type
     // Applying the note to the successful with-data row would turn ordinary
     // split traffic into a wall of errors, which is the more damaging of the
     // two ways to get this wrong.
+    //
+    // Both channels are in scope. Note 2 is a note on Table 5, and Table 5
+    // gives the Unsuccessful Completion Without Data row twice -- once on the
+    // peripheral channel and once on the flash channel, with the same encoding
+    // and the same footnote marker.
     if( info.variable != CycleVariable::SplitCompletion )
         return false;
-    if( info.layout != CycleLayout::CompletionWithoutData )
+    if( info.layout != CycleLayout::CompletionWithoutData && info.layout != CycleLayout::FlashCompletionWithoutData )
         return false;
     return ( CycleVariableValue( info, cycle_type ) & ESPI_CYCLE_SPLIT_P1_MASK ) == 0;
 }
@@ -171,10 +197,30 @@ bool LookupCycleHeaderLayout( CycleLayout layout, CycleHeaderLayout* out )
             out->has_message_code = e.has_message_code;
             out->has_payload = e.has_payload;
             out->length = e.length;
+            out->payload = e.payload;
         }
         return true;
     }
     return false;
+}
+
+FlashEraseSize LookupFlashEraseSize( uint16_t length_field )
+{
+    FlashEraseSize out;
+    for( const EraseSizeEntry& e : kEraseSizes )
+    {
+        if( e.encoding != length_field )
+            continue;
+        // An empty cell is Table 16 printing Reserved for that scheme, which is
+        // a statement rather than a gap, so it comes back as "no size" the same
+        // way an encoding the table never lists does.
+        if( e.target_attached[ 0 ] != '\0' )
+            out.target_attached = e.target_attached;
+        if( e.controller_attached[ 0 ] != '\0' )
+            out.controller_attached = e.controller_attached;
+        break;
+    }
+    return out;
 }
 
 uint8_t CycleTagOf( uint8_t byte1 )
@@ -206,6 +252,82 @@ unsigned CycleShortIoAddressBytes()
 unsigned CycleShortMemoryAddressBytes()
 {
     return ESPI_CYCLE_SHORT_MEMORY_ADDRESS_BYTES;
+}
+
+unsigned SmbusHeaderBytes()
+{
+    return ESPI_OOB_SMBUS_HEADER_BYTES;
+}
+
+uint8_t SmbusAddressBit0Expected()
+{
+    return ESPI_OOB_SMBUS_ADDRESS_BIT0_EXPECTED;
+}
+
+unsigned SmbusAddressBits()
+{
+    unsigned bits = 0;
+    for( unsigned mask = ESPI_OOB_SMBUS_ADDRESS_MASK; mask != 0; mask >>= 1 )
+        ++bits;
+    return bits;
+}
+
+SmbusPacketInfo DecodeSmbusPacket( unsigned length, uint8_t byte3, uint8_t byte4, uint8_t byte5 )
+{
+    SmbusPacketInfo info;
+    info.address = static_cast<uint8_t>( ( byte3 >> ESPI_OOB_SMBUS_ADDRESS_SHIFT ) & ESPI_OOB_SMBUS_ADDRESS_MASK );
+    info.address_bit0 = static_cast<uint8_t>( byte3 & ESPI_OOB_SMBUS_ADDRESS_BIT0_MASK );
+    info.command = byte4;
+    info.byte_count = byte5;
+
+    // Section 4.2.3, p.73. Signed on purpose: a Length shorter than the SMBus
+    // header plus the byte count is a real thing a broken initiator can send,
+    // and rendering it as a huge unsigned PEC count would hide it.
+    info.pec_bytes = static_cast<int>( length ) - static_cast<int>( ESPI_OOB_SMBUS_HEADER_BYTES )
+                     - static_cast<int>( byte5 );
+    info.consistent = ( info.pec_bytes == 0 || info.pec_bytes == 1 );
+    return info;
+}
+
+bool LookupSmbusCommand( uint8_t code, SmbusCommandInfo* out )
+{
+    for( const SmbusCommandInfo& e : kSmbusCommands )
+    {
+        if( e.code != code )
+            continue;
+        if( out != nullptr )
+            *out = e;
+        return true;
+    }
+    return false;
+}
+
+size_t DecodeMctpHeader( const uint8_t bytes[ 5 ], MctpHeaderField* out, size_t capacity )
+{
+    size_t count = 0;
+    for( const MctpHeaderField& f : kMctpFields )
+    {
+        if( count < capacity && out != nullptr )
+        {
+            MctpHeaderField& field = out[ count ];
+            field = f;
+            const uint8_t width = static_cast<uint8_t>( f.high - f.low + 1 );
+            const uint32_t mask = ( 1u << width ) - 1u;
+            field.value = ( static_cast<uint32_t>( bytes[ f.byte ] ) >> f.low ) & mask;
+        }
+        ++count;
+    }
+    return count;
+}
+
+uint8_t MctpSourceBit0( uint8_t byte0 )
+{
+    return static_cast<uint8_t>( byte0 & ESPI_OOB_MCTP_SOURCE_BIT0_MASK );
+}
+
+uint8_t MctpSourceBit0Expected()
+{
+    return ESPI_OOB_MCTP_SOURCE_BIT0_EXPECTED;
 }
 
 bool LookupMessageCode( uint8_t code, MessageCodeInfo* out )

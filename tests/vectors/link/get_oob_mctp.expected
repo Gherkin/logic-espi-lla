@@ -1,0 +1,35 @@
+Command
+  Opcode  0x07  GET_OOB
+  CRC  0x15  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Cycle Type  0x21  OOB (Tunneled SMBus) Message
+    Command Type  Posted
+    Direction  either direction
+  Tag  0x0
+  Length  0x00D  13 bytes
+  SMBus Packet  13 bytes
+    Target Address  0x10  address 0x08
+    Command Opcode  0x0F  MCTP
+    Byte Count  0x09  9 bytes, excluding the 3 SMBus header bytes and the PEC
+    MCTP Header  5 bytes
+      Source Target Address  0x10
+      MCTP Reserved  0x00
+      Header Version  0x01
+      Destination Endpoint ID  0x0A
+      Source Endpoint ID  0x1C
+      SOM  bit 7 = 1
+      EOM  bit 6 = 1
+      Packet Seq#  0x00
+      TO  bit 3 = 1
+      Message Tag  0x00
+    Data  4 bytes  DE AD BE EF
+    PEC  0x5C
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x0E  ok

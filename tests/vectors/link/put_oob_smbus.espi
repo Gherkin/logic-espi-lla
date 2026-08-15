@@ -1,0 +1,58 @@
+# PUT_OOB carrying a generic SMBus block write.
+#
+# HAND BUILT FROM THE SPECIFICATION. The capture is a link coming up and has no
+# OOB traffic at all -- it configures the OOB channel at offset 030h and never
+# uses it. So nothing here has independent evidence behind it; reading Figure 45
+# and section 4.2.3 is the only check there is.
+#
+# The eSPI header stops after three bytes. Everything from byte 3 on is *data*
+# as far as eSPI is concerned -- Figure 45's brace says so and p.73 repeats it in
+# prose: "The SMBus Target Address, SMBus Command Opcode, SMBus Byte Count,
+# SMBus Data fields and the optional PEC byte are sent as data within the eSPI
+# OOB message packet."
+#
+# What makes that worth decoding rather than dumping is that the packet states
+# its own length twice and the difference is load bearing.
+#
+# --- 1. A block write with the optional PEC byte ---
+#
+#   06     PUT_OOB                             Table 2, p.26
+#   21     Cycle Type: OOB (Tunneled SMBus) Message, 00100001
+#          Posted. Note the LSB: bit 0 is 1, so the cycle carries data, which
+#          is section 4.1.1's rule on p.46 agreeing with Figure 45.
+#   00     Tag 0, Length[11:8] = 0h
+#   08     Length[7:0] = 08h -> 8 bytes of data
+#   2C     SMBus Target Address 16h in bits [7:1], bit 0 = 0
+#          Figure 45 draws that bit as a literal '0' in its own cell, not as
+#          part of the address. 2Ch >> 1 is 16h.
+#   04     SMBus Command Opcode -- not 0Fh, so not MCTP, and the base spec
+#          names no other code
+#   04     SMBus Byte Count = 4
+#   11 22 33 44   the 4 counted data bytes
+#   B7     PEC
+#
+# The arithmetic p.73 calls "a simple arithmetic operation": Length 8, minus
+# the 3 SMBus header bytes, minus a Byte Count of 4, leaves exactly 1 byte, and
+# the only thing allowed there is the PEC. Figure 47 works the same sum on the
+# page for a 64 byte payload: (3+64+1) = 68.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4).
+CMD 06 21 00 08 2C 04 04 11 22 33 44 B7 78
+TAR
+RSP 08 0F 01 95
+
+# --- 2. The same message with no PEC byte, and a nonzero Tag ---
+#
+# One byte shorter, and that one byte is the whole difference. Nothing in the
+# packet flags the PEC's absence -- Figure 45 draws it with a dashed border and
+# the specification never adds a presence bit. Length 7 = 3 + 4 + 0.
+#
+#   10     Tag 1, Length[11:8] = 0h
+#   07     Length[7:0] = 07h -> 7 bytes
+#
+# A decoder that assumed a PEC would report 3 data bytes and a PEC of 44h here,
+# and a decoder that assumed no PEC would report 5 data bytes above. Both decode
+# to the right total length and neither would look wrong.
+CMD 06 21 10 07 2C 04 04 11 22 33 44 19
+TAR
+RSP 08 0F 01 95

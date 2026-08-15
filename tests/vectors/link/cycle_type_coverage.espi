@@ -1,0 +1,93 @@
+# The three Table 5 cycle types no other fixture reaches.
+#
+# HAND BUILT FROM THE SPECIFICATION. This fixture exists for one reason: phase 6
+# of docs/PLAN.md exits on "every Table 5 cycle type has a vector", and an audit
+# of the .expected files found three rows that no decode had ever run over.
+#
+# They were invisible because the *table* tests walk all 18 rows and the
+# mutation suite kills a mutation on any of them -- both check the row against
+# the transcription, and neither needs the decoder to have decoded one. A row
+# can be perfectly transcribed, perfectly mutation-covered, and still have a
+# header layout that has never been used to read a packet.
+#
+# --- 1. Memory Write 64: the 11-byte header, carrying data ---
+#
+# put_np_memory_read.espi already reaches the 11-byte header on a Memory Read 64,
+# which has no payload. This is the same header with data behind it, so the
+# payload offset after an 8-byte address is exercised.
+#
+#   00     PUT_PC
+#   03     Cycle Type: Memory Write 64        Table 5, p.47
+#          Odd, so it carries data -- section 4.1.1's LSB rule, p.46.
+#   10     Tag 1, Length[11:8] = 0h
+#   02     Length[7:0] = 02h -> 2 bytes
+#   00 00 00 01 00 00 00 00    Address, most significant byte first
+#
+#          Section 4.1.4, p.51: "When 64 bits addressing format is used, the
+#          upper 32 bits address [63:32] must not be all 0". So the address is
+#          0000_0001_0000_0000h, which is legal; an address below 4 GB here
+#          would be a warning, and that path is already covered by
+#          put_np_memory_read.espi.
+#
+#   DE AD  Data
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4).
+CMD 00 03 10 02 00 00 00 01 00 00 00 00 DE AD B7
+TAR
+RSP 08 0F 01 95
+
+# --- 2. Message with Data: a message code Table 6 does not name ---
+#
+# put_pc_ltr_message.espi covers the Message row and Table 6's one code. This is
+# the other message row -- the one that carries a payload after the four message
+# specific bytes -- and it deliberately uses a code Table 6 has never heard of.
+#
+#   00     PUT_PC
+#   11     Cycle Type: 0001 r2r1r0 1 with r2r1r0 = 000b
+#          Message with Data, routing "Local -- terminated at receiver"
+#   20     Tag 2, Length[11:8] = 0h
+#   03     Length[7:0] = 03h -> 3 bytes
+#
+#          Note the contrast with the plain Message row, whose Length is
+#          Reserved and must be all 0s (p.55). Same figure, same header, and the
+#          field means different things on the two rows.
+#
+#   02     Message Code -- not 01h, so not LTR, and Table 6 defines nothing else
+#   AA BB CC DD   the four message specific bytes
+#
+#          With no transcribed layout behind the code, these are reported as
+#          four numbered bytes rather than resolved. That is the honest answer,
+#          and it is a different answer from LTR's fields being decoded.
+#
+#   11 22 33      Data
+CMD 00 11 20 03 02 AA BB CC DD 11 22 33 4D
+TAR
+RSP 08 0F 01 95
+
+# --- 3. Unsuccessful Completion Without Data, on the FLASH channel ---
+#
+# completion_split.espi walks the whole P1P0 field on the peripheral channel.
+# Table 5 prints this row twice, once per channel, and stage E gave the flash
+# copy its own header layout -- so note 2's P1 rule now applies to two rows
+# rather than one. Nothing had ever decoded the flash copy.
+#
+#   0B     GET_FLASH_C
+#   31     CRC
+#
+#   08     ACCEPT
+#   0E     Cycle Type: 00001 P1P0 0 with P1P0 = 11b
+#          Unsuccessful Completion Without Data, "only completion for a split
+#          transaction".
+#
+#          Note 2, p.49: "For Unsuccessful Completion without Data, P1 must be
+#          always a '1' as this is always the last or the only completion." 11b
+#          satisfies it. The forbidden encodings 00b and 01b are exercised on
+#          the peripheral copy in completion_split.espi.
+#
+#   40     Tag 4, Length[11:8] = 0h
+#   00     Length[7:0] = 00h, driven to zero as section 4.1.3 requires
+#   0F 01  Status
+#   42     CRC
+CMD 0B 31
+TAR
+RSP 08 0E 40 00 0F 01 42

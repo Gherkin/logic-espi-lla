@@ -200,6 +200,11 @@ void TestPeripheralPackets()
     // The short cycles, whose length lives in the opcode rather than the
     // packet, and whose read responses carry no completion header.
     CheckAgainstExpected( "short_cycles.espi", "short_cycles.expected", true );
+
+    // The three Table 5 rows nothing else reaches -- Memory Write 64, Message
+    // with Data, and the flash copy of Unsuccessful Completion Without Data.
+    // See TestEveryCycleTypeHasAVector for why they went unnoticed.
+    CheckAgainstExpected( "cycle_type_coverage.espi", "cycle_type_coverage.expected", true );
 }
 
 void TestWaitState()
@@ -271,13 +276,7 @@ void TestFramingInvariant()
 void TestUntranscribedShapesAreGaps()
 {
     const uint8_t no_shape[] = {
-        0x06, // PUT_OOB       -- needs Figure 45
-        0x07, // GET_OOB
-        0x08, // PUT_FLASH_C   -- needs Figures 48 and 50
-        0x09, // GET_FLASH_NP
-        0x0A, // PUT_FLASH_NP
-        0x0B, // GET_FLASH_C
-        0xFF, // RESET
+        0xFF, // RESET -- Table 2 p.27 gives it one line and no figure
     };
     for( uint8_t opcode : no_shape )
     {
@@ -286,12 +285,15 @@ void TestUntranscribedShapesAreGaps()
         TEST_CHECK( !LookupShape( opcode, nullptr ) );
     }
 
-    // The eight peripheral opcodes do resolve now. Asserting that here as well
-    // keeps the two halves of this test in one place: a shape quietly dropped
-    // from the table would otherwise just shorten the list above.
+    // Everything else does resolve now. Asserting that here as well keeps the
+    // two halves of this test in one place: a shape quietly dropped from the
+    // table would otherwise just shorten the list above.
     const uint8_t has_shape[] = {
         0x00, 0x01, 0x02, 0x03, // PUT_PC, GET_PC, PUT_NP, GET_NP
         0x40, 0x44, 0x48, 0x4C, // the four short cycles at C1C0 = 00b
+        0x06, 0x07,             // PUT_OOB, GET_OOB          -- stage E
+        0x08, 0x09,             // PUT_FLASH_C, GET_FLASH_NP -- stage E
+        0x0A, 0x0B,             // PUT_FLASH_NP, GET_FLASH_C -- stage E
     };
     for( uint8_t opcode : has_shape )
     {
@@ -333,6 +335,9 @@ void TestConfigRegisterGaps()
         { 0x0020, "Channel 1 Capabilities and Configurations" },
         { 0x0030, "Channel 2 Capabilities and Configurations" },
         { 0x0040, "Channel 3 Capabilities and Configurations" },
+        { 0x0044, "Channel 3 Capabilities and Configurations 2" },
+        { 0x0048, "Channel 3 Capabilities and Configurations 3" },
+        { 0x004C, "Channel 3 Capabilities and Configurations 4" },
     };
     for( const Expect& e : known )
     {
@@ -346,16 +351,17 @@ void TestConfigRegisterGaps()
         TEST_CHECK( std::string( name ) == e.name );
     }
 
-    // Table 21 names these, but nobody has transcribed their bits. "A register
-    // we have not done yet" is a different answer from "not a register".
-    const uint16_t no_layout[] = { 0x0044, 0x0048, 0x004C };
-    for( uint16_t address : no_layout )
+    // NoFieldLayout is the answer for a register Table 21 names whose bits
+    // nobody has transcribed. No register is in that state now -- 044h, 048h
+    // and 04Ch were the last three and stage E read pp.104-106 -- but the
+    // outcome must stay distinguishable from "not a register", which is what
+    // ReservedRange means. Checked by construction rather than by example:
+    // nothing in Table 21 may classify as NoFieldLayout.
+    for( unsigned address = 0; address <= 0xFFF; address += 4 )
     {
-        const char* name = nullptr;
-        if( ClassifyConfigAddress( address, &name ) != ConfigAddress::NoFieldLayout )
-            std::fprintf( stderr, "FAIL  address 0x%04X should be a named register with no layout\n", address );
-        TEST_CHECK( ClassifyConfigAddress( address, &name ) == ConfigAddress::NoFieldLayout );
-        TEST_CHECK( !LookupConfigRegister( address, nullptr ) );
+        if( ClassifyConfigAddress( static_cast<uint16_t>( address ), nullptr ) == ConfigAddress::NoFieldLayout )
+            std::fprintf( stderr, "FAIL  address 0x%04X is a named register with no transcribed layout\n", address );
+        TEST_CHECK( ClassifyConfigAddress( static_cast<uint16_t>( address ), nullptr ) != ConfigAddress::NoFieldLayout );
     }
 
     const uint16_t reserved[] = {
@@ -605,9 +611,36 @@ void TestConfigResetState()
     TEST_CHECK( ConfigResetValue( 0x004, &value, &known ) );
     TEST_CHECK_EQ( value & 0xFFu, 0x01u );
 
-    // A register with no transcribed layout has no reset state to offer.
-    TEST_CHECK( !ConfigResetValue( 0x044, &value, &known ) );
+    // A range that is not a register has no reset state to offer.
     TEST_CHECK( !ConfigResetValue( 0x050, &value, &known ) );
+    TEST_CHECK( !ConfigResetValue( 0x014, &value, &known ) );
+
+    // 044h, 048h and 04Ch do have a layout now, and every field in all three
+    // that carries information is RO/HwInit -- they describe the flash hardware
+    // behind the target, not a state the specification can predict. So they
+    // resolve, and the only bits the reset state claims to know are the
+    // Reserved spans, which the page does give a Default of 0.
+    for( uint16_t address : { uint16_t( 0x044 ), uint16_t( 0x048 ), uint16_t( 0x04C ) } )
+    {
+        if( !ConfigResetValue( address, &value, &known ) )
+            std::fprintf( stderr, "FAIL  register %03X has a layout but no reset state\n", address );
+        TEST_CHECK( ConfigResetValue( address, &value, &known ) );
+        TEST_CHECK_EQ( value, 0u ); // every stated default in all three is 0
+
+        ConfigField fields[ 16 ];
+        const size_t count = DecodeConfigRegister( address, 0, fields, 16 );
+        for( size_t i = 0; i < count && i < 16; ++i )
+        {
+            const ConfigField& f = fields[ i ];
+            if( f.reserved )
+                continue;
+            const uint8_t width = static_cast<uint8_t>( f.high - f.low + 1 );
+            const uint32_t mask = ( width >= 32 ) ? 0xFFFFFFFFu : ( ( ( 1u << width ) - 1u ) << f.low );
+            if( ( known & mask ) != 0 )
+                std::fprintf( stderr, "FAIL  %03X %s is HwInit but the reset state claims to know it\n", address, f.name );
+            TEST_CHECK_EQ( known & mask, 0u );
+        }
+    }
 }
 
 // Table 3, p.30, typed from the rendered page.
@@ -1217,6 +1250,25 @@ void TestCycleHeaderLayouts()
         // Figure 39, p.55: three header bytes either way.
         { CycleLayout::CompletionWithData, 3, 0, false, true, CycleLength::OneBased },
         { CycleLayout::CompletionWithoutData, 3, 0, false, false, CycleLength::MustBeZero },
+        // Figure 45, p.73: three header bytes, then the whole SMBus packet as
+        // data. The SMBus Target Address is byte 3, which the figure's brace
+        // puts under Data rather than Header -- so address_bytes is 0 here even
+        // though the packet is full of addresses.
+        { CycleLayout::OobMessage, 3, 0, false, true, CycleLength::OneBased },
+        // Figure 48, p.75: Byte 0 cycle type through Byte 6 Address[7:0], the
+        // same seven bytes Figure 36 gives a 32-bit peripheral read.
+        { CycleLayout::FlashRead, 7, 4, false, false, CycleLength::OneBased },
+        { CycleLayout::FlashWrite, 7, 4, false, true, CycleLength::OneBased },
+        // Same header again, and a Length that is not a byte count at all.
+        { CycleLayout::FlashErase, 7, 4, false, false, CycleLength::BlockErase },
+        // Figure 50, p.76: THREE header bytes and no address. Table 16, p.81,
+        // says the same from the other side -- its Address Size column reads
+        // "N/A" for both RPMC rows and "4 B" for the other three.
+        { CycleLayout::FlashRpmcOp1, 3, 0, false, true, CycleLength::OneBased },
+        { CycleLayout::FlashRpmcOp2, 3, 0, false, false, CycleLength::OneBased },
+        // Figure 49, p.75: what Figure 39 draws, drawn again for flash.
+        { CycleLayout::FlashCompletionWithData, 3, 0, false, true, CycleLength::OneBased },
+        { CycleLayout::FlashCompletionWithoutData, 3, 0, false, false, CycleLength::MustBeZero },
     };
 
     for( const Expect& e : table )
@@ -1244,18 +1296,54 @@ void TestCycleHeaderLayouts()
         TEST_CHECK_EQ( derived, got.header_bytes );
     }
 
-    // The OOB and flash rows point at figures nobody has read yet. That is a
-    // gap in the transcription, and it must not resolve to some other row's
-    // layout however plausible the packet would look.
+    // NotTranscribed is a gap marker, and it must never resolve to some other
+    // row's layout however plausible the packet would look. No row carries it
+    // now that the OOB and flash figures have been read, but the mechanism has
+    // to keep working or the next gap becomes a guess.
     TEST_CHECK( !LookupCycleHeaderLayout( CycleLayout::NotTranscribed, nullptr ) );
     for( size_t i = 0; i < CycleTypeCount(); ++i )
     {
         const CycleTypeInfo& row = CycleTypeAt( i );
-        const bool transcribed = row.channel == ChannelId::Peripheral;
-        if( ( row.layout != CycleLayout::NotTranscribed ) != transcribed )
-            std::fprintf( stderr, "FAIL  %s on channel %s has the wrong transcription state\n", row.name,
-                          ChannelName( row.channel ) );
-        TEST_CHECK_EQ( row.layout != CycleLayout::NotTranscribed, transcribed );
+        if( row.layout == CycleLayout::NotTranscribed )
+            std::fprintf( stderr, "FAIL  %s on channel %s has no transcribed layout\n", row.name, ChannelName( row.channel ) );
+        TEST_CHECK( row.layout != CycleLayout::NotTranscribed );
+
+        // Every row must reach a layout entry. A row pointing at an enumerator
+        // with no table row would otherwise report as a gap at decode time and
+        // look identical to a deliberate one.
+        if( !LookupCycleHeaderLayout( row.layout, nullptr ) )
+            std::fprintf( stderr, "FAIL  %s points at a layout with no table row\n", row.name );
+        TEST_CHECK( LookupCycleHeaderLayout( row.layout, nullptr ) );
+    }
+
+    // Each of the three channels keeps its own layouts. Sharing one across
+    // channels is exactly the shortcut Figure 49 invites -- it draws what
+    // Figure 39 draws -- and a row here is meant to cite the one figure it was
+    // checked against.
+    struct ChannelLayout
+    {
+        ChannelId channel;
+        CycleLayout layout;
+    };
+    const ChannelLayout owned[] = {
+        { ChannelId::Peripheral, CycleLayout::CompletionWithData },
+        { ChannelId::Peripheral, CycleLayout::CompletionWithoutData },
+        { ChannelId::Oob, CycleLayout::OobMessage },
+        { ChannelId::Flash, CycleLayout::FlashCompletionWithData },
+        { ChannelId::Flash, CycleLayout::FlashCompletionWithoutData },
+    };
+    for( const ChannelLayout& c : owned )
+    {
+        for( size_t i = 0; i < CycleTypeCount(); ++i )
+        {
+            const CycleTypeInfo& row = CycleTypeAt( i );
+            if( row.layout != c.layout )
+                continue;
+            if( row.channel != c.channel )
+                std::fprintf( stderr, "FAIL  %s on channel %s uses another channel's layout\n", row.name,
+                              ChannelName( row.channel ) );
+            TEST_CHECK( row.channel == c.channel );
+        }
     }
 }
 
@@ -1349,9 +1437,22 @@ void TestCycleVariableFields()
             TEST_CHECK( std::string( row.name ) == "Unsuccessful Completion Without Data" );
         }
     }
-    // Only the peripheral one, so far: the flash row's layout is not
-    // transcribed yet, and stage E will bring it into scope.
-    TEST_CHECK_EQ( flagged_rows, size_t( 1 ) );
+    // Two rows now, not one: Table 5 gives Unsuccessful Completion Without Data
+    // twice, on the peripheral channel and on the flash channel, with the same
+    // encoding and the same footnote markers. Note 2 is a note on Table 5 and
+    // does not distinguish them. Stage D could only reach the peripheral one
+    // because the flash row had no layout.
+    TEST_CHECK_EQ( flagged_rows, size_t( 2 ) );
+
+    // And the flash one specifically, so that a future row acquiring a
+    // completion layout cannot quietly take the count back to two.
+    CycleTypeInfo flash_unsuccessful;
+    TEST_CHECK( LookupCycleType( ChannelId::Flash, 0x08, &flash_unsuccessful ) );
+    TEST_CHECK( std::string( flash_unsuccessful.name ) == "Unsuccessful Completion Without Data" );
+    TEST_CHECK( SplitCompletionViolatesNote2( flash_unsuccessful, 0x08 ) );  // P1P0 = 00b
+    TEST_CHECK( SplitCompletionViolatesNote2( flash_unsuccessful, 0x0A ) );  // P1P0 = 01b
+    TEST_CHECK( !SplitCompletionViolatesNote2( flash_unsuccessful, 0x0C ) ); // 10b, last
+    TEST_CHECK( !SplitCompletionViolatesNote2( flash_unsuccessful, 0x0E ) ); // 11b, only
 
     // Note 5. Only 000b is defined; 001b-111b is one Reserved row.
     TEST_CHECK( MessageRoutingText( 0x0 ) != nullptr );
@@ -1464,6 +1565,422 @@ void TestMessageCodesAndLtr()
     TEST_CHECK_EQ( one, 1u );
 }
 
+// --- OOB and flash, stage E ------------------------------------------------
+
+// The OOB and flash channels. Every fixture here is hand built: the capture
+// configures the OOB channel at offset 030h, never uses it, and never touches
+// the flash channel at all.
+void TestOobPackets()
+{
+    // Figure 45, p.73, both with and without the optional PEC byte.
+    CheckAgainstExpected( "put_oob_smbus.espi", "put_oob_smbus.expected", true );
+
+    // Figure 46, p.74 -- MCTP, the one SMBus command opcode this document
+    // names, and the one place a Byte Count includes an embedded header.
+    CheckAgainstExpected( "get_oob_mctp.espi", "get_oob_mctp.expected", true );
+}
+
+void TestFlashPackets()
+{
+    // Figures 48 and 49, pp.75, and the opcode pairing of section 4.2.4.1.
+    CheckAgainstExpected( "flash_controller_attached.espi", "flash_controller_attached.expected", true );
+
+    // The other pairing, plus Table 16's erase block sizes.
+    CheckAgainstExpected( "flash_target_attached.espi", "flash_target_attached.expected", true );
+
+    // Figure 50, p.76 -- the three-byte header with no address.
+    CheckAgainstExpected( "flash_rpmc.espi", "flash_rpmc.expected", true );
+}
+
+void TestChannel3ExtensionRegisters()
+{
+    CheckAgainstExpected( "config_flash_rpmc.espi", "config_flash_rpmc.expected", true );
+}
+
+// Table 16, p.81 -- the Length column of the Flash Erase row.
+//
+// Two lists in one table cell, one per flash sharing scheme, and the scheme is
+// not on the bus. Every encoding below disagrees between the two columns except
+// 2h, so a decoder that reported only one of them would be quietly wrong half
+// the time.
+void TestFlashEraseSizes()
+{
+    struct Expect
+    {
+        uint16_t encoding;
+        const char* target_attached;   // null where Table 16 prints Reserved
+        const char* controller_attached;
+    };
+    const Expect table[] = {
+        { 0x000, "4 KB", nullptr },
+        { 0x001, "32 KB", "4 KB" },
+        { 0x002, "64 KB", "64 KB" },
+        { 0x003, "128 KB", nullptr },
+        { 0x004, nullptr, "128 KB" },
+        { 0x005, nullptr, "256 KB" },
+    };
+
+    for( const Expect& e : table )
+    {
+        const FlashEraseSize got = LookupFlashEraseSize( e.encoding );
+        const bool target_ok = ( e.target_attached == nullptr ) ? ( got.target_attached == nullptr )
+                                                                : ( got.target_attached != nullptr
+                                                                    && std::string( got.target_attached ) == e.target_attached );
+        const bool controller_ok =
+            ( e.controller_attached == nullptr )
+                ? ( got.controller_attached == nullptr )
+                : ( got.controller_attached != nullptr && std::string( got.controller_attached ) == e.controller_attached );
+        if( !target_ok || !controller_ok )
+            std::fprintf( stderr, "FAIL  erase encoding %03X: expected %s / %s, got %s / %s\n", e.encoding,
+                          e.target_attached != nullptr ? e.target_attached : "Reserved",
+                          e.controller_attached != nullptr ? e.controller_attached : "Reserved",
+                          got.target_attached != nullptr ? got.target_attached : "Reserved",
+                          got.controller_attached != nullptr ? got.controller_attached : "Reserved" );
+        TEST_CHECK( target_ok );
+        TEST_CHECK( controller_ok );
+    }
+
+    // 011b is the encoding section 4.2.4.1, p.79, calls out by name: "length
+    // field encoding of '011' is not applicable for Flash Erase in Controller
+    // Attached Flash Sharing". It is a real size on the other scheme.
+    TEST_CHECK( LookupFlashEraseSize( 0x003 ).controller_attached == nullptr );
+    TEST_CHECK( LookupFlashEraseSize( 0x003 ).target_attached != nullptr );
+
+    // Everything above 5h is Reserved in both columns -- Table 16 ends the
+    // target attached list at 4h-FFFh and the controller attached one at
+    // 6h-FFFh. Walking the whole 12-bit field rather than sampling, because a
+    // stray entry here would only show at the value nobody thought to try.
+    for( unsigned raw = 0x006; raw <= 0xFFF; ++raw )
+    {
+        const FlashEraseSize got = LookupFlashEraseSize( static_cast<uint16_t>( raw ) );
+        if( got.target_attached != nullptr || got.controller_attached != nullptr )
+            std::fprintf( stderr, "FAIL  erase encoding %03X should be Reserved in both columns\n", raw );
+        TEST_CHECK( got.target_attached == nullptr );
+        TEST_CHECK( got.controller_attached == nullptr );
+    }
+
+    // The 4 KB rule must not leak into an erase Length. 000h is 4 KB of *erase
+    // block*, which happens to read the same but is arrived at from Table 16
+    // rather than from section 4.1.3, and 001h is where the two readings part
+    // company: 32 KB, not 1 byte.
+    CycleTypeInfo erase;
+    TEST_CHECK( LookupCycleType( ChannelId::Flash, 0x02, &erase ) );
+    TEST_CHECK( std::string( erase.name ) == "Flash Erase" );
+    CycleHeaderLayout layout;
+    TEST_CHECK( LookupCycleHeaderLayout( erase.layout, &layout ) );
+    TEST_CHECK( layout.length == CycleLength::BlockErase );
+
+    // Flash Read and Flash Write keep the ordinary rule, so the special case is
+    // one row of Table 5 and not the whole channel.
+    for( uint8_t encoding : { uint8_t( 0x00 ), uint8_t( 0x01 ) } )
+    {
+        CycleTypeInfo info;
+        TEST_CHECK( LookupCycleType( ChannelId::Flash, encoding, &info ) );
+        TEST_CHECK( LookupCycleHeaderLayout( info.layout, &layout ) );
+        TEST_CHECK( layout.length == CycleLength::OneBased );
+    }
+}
+
+// Figure 45, p.73, and the arithmetic section 4.2.3 states in prose.
+void TestOobSmbusPacket()
+{
+    TEST_CHECK_EQ( SmbusHeaderBytes(), 3u );
+    TEST_CHECK_EQ( SmbusAddressBit0Expected(), uint8_t( 0 ) );
+
+    // Figure 45 gives the address bits [7:1], so seven of them. Worth asserting
+    // separately from the extraction: shifting a byte right by one already
+    // fits in seven bits, so the field width changes nothing about the value
+    // and only a check on the width itself can pin it.
+    TEST_CHECK_EQ( SmbusAddressBits(), 7u );
+
+    // "SMBus Target Address" occupies bits [7:1]; bit 0 is drawn as a literal
+    // '0' in its own cell. Reading the whole byte as the address doubles it.
+    const SmbusPacketInfo a = DecodeSmbusPacket( 8, 0x2C, 0x04, 0x04 );
+    TEST_CHECK_EQ( a.address, uint8_t( 0x16 ) );
+    TEST_CHECK_EQ( a.address_bit0, uint8_t( 0 ) );
+    TEST_CHECK_EQ( a.command, uint8_t( 0x04 ) );
+    TEST_CHECK_EQ( a.byte_count, uint8_t( 0x04 ) );
+    // Length 8 = 3 header + 4 counted + 1 PEC.
+    TEST_CHECK_EQ( a.pec_bytes, 1 );
+    TEST_CHECK( a.consistent );
+
+    // The same packet one byte shorter has no PEC, and nothing else changes.
+    const SmbusPacketInfo b = DecodeSmbusPacket( 7, 0x2C, 0x04, 0x04 );
+    TEST_CHECK_EQ( b.pec_bytes, 0 );
+    TEST_CHECK( b.consistent );
+
+    // An odd address, so that a mask which happened to work on 2Ch does not.
+    TEST_CHECK_EQ( DecodeSmbusPacket( 3, 0xFF, 0, 0 ).address, uint8_t( 0x7F ) );
+    TEST_CHECK_EQ( DecodeSmbusPacket( 3, 0xFF, 0, 0 ).address_bit0, uint8_t( 1 ) );
+
+    // Two bytes where the specification allows nothing or one.
+    const SmbusPacketInfo two = DecodeSmbusPacket( 9, 0x2C, 0x04, 0x04 );
+    TEST_CHECK_EQ( two.pec_bytes, 2 );
+    TEST_CHECK( !two.consistent );
+
+    // A Length shorter than the header plus the count. Signed on purpose: an
+    // unsigned subtraction here reports a PEC count of four billion, which
+    // reads as a wild value rather than as a short packet.
+    const SmbusPacketInfo short_packet = DecodeSmbusPacket( 5, 0x2C, 0x04, 0x04 );
+    TEST_CHECK_EQ( short_packet.pec_bytes, -2 );
+    TEST_CHECK( !short_packet.consistent );
+
+    // Table of SMBus command opcodes: one row, MCTP at 0Fh, whose embedded
+    // header is 5 of the counted bytes. Figure 46's worked example is
+    // Byte Count = (5+64) = 69 for a 64 byte payload.
+    SmbusCommandInfo mctp;
+    TEST_CHECK( LookupSmbusCommand( 0x0F, &mctp ) );
+    TEST_CHECK( std::string( mctp.name ) == "MCTP" );
+    TEST_CHECK_EQ( mctp.header_bytes, uint8_t( 5 ) );
+
+    TEST_CHECK( !LookupSmbusCommand( 0x00, nullptr ) );
+    TEST_CHECK( !LookupSmbusCommand( 0x0E, nullptr ) );
+    TEST_CHECK( !LookupSmbusCommand( 0xFF, nullptr ) );
+
+    // The OOB cycle type carries data, which is section 4.1.1's LSB rule
+    // (21h is odd) agreeing with Figure 45's Data brace.
+    CycleTypeInfo oob;
+    TEST_CHECK( LookupCycleType( ChannelId::Oob, 0x21, &oob ) );
+    CycleHeaderLayout layout;
+    TEST_CHECK( LookupCycleHeaderLayout( oob.layout, &layout ) );
+    TEST_CHECK( layout.has_payload );
+    TEST_CHECK( layout.payload == CyclePayload::SmbusPacket );
+    TEST_CHECK_EQ( layout.header_bytes, uint8_t( 3 ) );
+    TEST_CHECK_EQ( layout.address_bytes, uint8_t( 0 ) );
+}
+
+// Figure 46, p.74 -- the five MCTP header bytes.
+//
+// The bit ranges in byte 4 are read off cell borders against the figure's bit
+// ruler, because that figure prints no bit numbers for them. That makes this
+// the weakest transcription in the repository and the one most worth pinning
+// against a value where every field is different.
+void TestMctpHeader()
+{
+    struct Expect
+    {
+        uint8_t byte;
+        uint8_t high;
+        uint8_t low;
+        const char* name;
+        uint32_t value;
+    };
+    // 21 01 0A 1C C8 -- the bytes of get_oob_mctp.espi.
+    const uint8_t bytes[ 5 ] = { 0x21, 0x01, 0x0A, 0x1C, 0xC8 };
+    const Expect table[] = {
+        { 0, 7, 1, "Source Target Address", 0x10 },
+        { 1, 7, 4, "MCTP Reserved", 0x0 },
+        { 1, 3, 0, "Header Version", 0x1 },
+        { 2, 7, 0, "Destination Endpoint ID", 0x0A },
+        { 3, 7, 0, "Source Endpoint ID", 0x1C },
+        { 4, 7, 7, "SOM", 1 },
+        { 4, 6, 6, "EOM", 1 },
+        { 4, 5, 4, "Packet Seq#", 0 },
+        { 4, 3, 3, "TO", 1 },
+        { 4, 2, 0, "Message Tag", 0 },
+    };
+
+    MctpHeaderField got[ 16 ];
+    const size_t count = DecodeMctpHeader( bytes, got, 16 );
+    const size_t rows = sizeof( table ) / sizeof( table[ 0 ] );
+    if( count != rows )
+        std::fprintf( stderr, "FAIL  MCTP header has %zu fields, expected %zu\n", count, rows );
+    TEST_CHECK_EQ( count, rows );
+
+    for( size_t i = 0; i < rows && i < count; ++i )
+    {
+        const Expect& want = table[ i ];
+        if( std::string( got[ i ].name ) != want.name || got[ i ].byte != want.byte || got[ i ].high != want.high
+            || got[ i ].low != want.low )
+        {
+            std::fprintf( stderr, "FAIL  MCTP field %zu: expected %s at byte %u [%u:%u], got %s at byte %u [%u:%u]\n", i,
+                          want.name, want.byte, want.high, want.low, got[ i ].name, got[ i ].byte, got[ i ].high,
+                          got[ i ].low );
+            TEST_CHECK( false );
+            continue;
+        }
+        TEST_CHECK_EQ( got[ i ].value, want.value );
+    }
+
+    // The five sub-fields of byte 4 must tile it exactly. Eight bits, no gap
+    // and no overlap -- the one check available on a set of ranges read from
+    // cell borders rather than from printed numbers.
+    uint32_t covered = 0;
+    for( size_t i = 0; i < count && i < 16; ++i )
+    {
+        if( got[ i ].byte != 4 )
+            continue;
+        for( uint8_t bit = got[ i ].low; bit <= got[ i ].high; ++bit )
+        {
+            if( ( covered >> bit ) & 1u )
+                std::fprintf( stderr, "FAIL  MCTP byte 4 bit %u is claimed by two fields\n", bit );
+            TEST_CHECK_EQ( ( covered >> bit ) & 1u, 0u );
+            covered |= 1u << bit;
+        }
+    }
+    if( covered != 0xFFu )
+        std::fprintf( stderr, "FAIL  MCTP byte 4 fields cover %02X, not the whole byte\n", covered );
+    TEST_CHECK_EQ( covered, 0xFFu );
+
+    // Byte 0's bit 0 is drawn as a literal 1, the opposite of Figure 45's
+    // destination byte. Same cell, opposite value.
+    TEST_CHECK_EQ( MctpSourceBit0Expected(), uint8_t( 1 ) );
+    TEST_CHECK_EQ( MctpSourceBit0( 0x21 ), uint8_t( 1 ) );
+    TEST_CHECK_EQ( MctpSourceBit0( 0x20 ), uint8_t( 0 ) );
+    TEST_CHECK( MctpSourceBit0Expected() != SmbusAddressBit0Expected() );
+}
+
+// Phase 6 of docs/PLAN.md exits on "every Table 5 cycle type has a vector".
+//
+// That is a stronger claim than anything else in this file checks, and the
+// difference is easy to miss. TestCycleTypeEncodings walks all 18 rows, and the
+// mutation suite kills a mutation on any of them -- but both compare a row
+// against the transcription, and neither needs the decoder to have decoded a
+// packet carrying it. A row can be correctly transcribed, fully mutation
+// covered, and have a header layout no decode has ever used.
+//
+// So this reads the .expected files and asks a different question: did a real
+// transaction come out the other side naming this row? Three rows failed it
+// when it was first written, which is why cycle_type_coverage.espi exists.
+void TestEveryCycleTypeHasAVector()
+{
+    static const char* kFixtures[] = {
+        "put_pc_memory_write32.expected", "get_pc_completion.expected",  "put_np_memory_read.expected",
+        "completion_split.expected",      "put_pc_ltr_message.expected", "short_cycles.expected",
+        "put_oob_smbus.expected",         "get_oob_mctp.expected",       "flash_controller_attached.expected",
+        "flash_target_attached.expected", "flash_rpmc.expected",         "cycle_type_coverage.expected",
+    };
+
+    // Matching a cycle type line on its own is not enough. Table 5 prints three
+    // rows -- the two completions without data and the one with -- once per
+    // channel with the SAME name and the SAME encoding, so "Cycle Type  0x06
+    // Successful Completion Without Data" is ambiguous on the page and in the
+    // decode. A peripheral vector would silently stand in for its flash
+    // namesake and leave the flash row untested.
+    //
+    // The channel comes from the opcode, so the corpus is walked in order: each
+    // "Opcode  0xNN" line sets the channel for every cycle type line after it
+    // until the next one. That leans on the opcode table's Channel column being
+    // right, which test_opcodes pins separately.
+    struct Seen
+    {
+        ChannelId channel;
+        uint8_t encoding;
+        std::string name;
+    };
+    std::vector<Seen> seen;
+
+    for( const char* fixture : kFixtures )
+    {
+        bool ok = false;
+        const std::string text = ReadFile( VectorPath( fixture ), &ok );
+        if( !ok )
+            std::fprintf( stderr, "FAIL  cannot read %s\n", fixture );
+        TEST_CHECK( ok );
+
+        ChannelId channel = ChannelId::ChannelIndependent;
+        std::istringstream lines( text );
+        std::string line;
+        while( std::getline( lines, line ) )
+        {
+            unsigned byte = 0;
+            char name[ 128 ] = { 0 };
+
+            if( std::sscanf( line.c_str(), "  Opcode  0x%2X", &byte ) == 1 )
+            {
+                OpcodeInfo info;
+                channel = LookupOpcode( static_cast<uint8_t>( byte ), &info ) ? info.channel
+                                                                             : ChannelId::ChannelIndependent;
+                continue;
+            }
+            if( std::sscanf( line.c_str(), "  Cycle Type  0x%2X  %127[^\n]", &byte, name ) == 2 )
+                seen.push_back( Seen{ channel, static_cast<uint8_t>( byte ), std::string( name ) } );
+        }
+    }
+
+    for( size_t i = 0; i < CycleTypeCount(); ++i )
+    {
+        const CycleTypeInfo& row = CycleTypeAt( i );
+
+        bool found = false;
+        for( const Seen& s : seen )
+        {
+            // A row with a variable field spans several bytes, and any of them
+            // counts as a vector for that row.
+            if( s.channel != row.channel || ( s.encoding & row.mask ) != row.encoding )
+                continue;
+            if( s.name == row.name )
+                found = true;
+        }
+
+        if( !found )
+            std::fprintf( stderr, "FAIL  %s on the %s channel has no decode vector\n", row.name,
+                          ChannelName( row.channel ) );
+        TEST_CHECK( found );
+    }
+
+    // And the walk must actually have found cycle types, or the loop above
+    // passes by comparing an empty list against itself.
+    TEST_CHECK( seen.size() >= CycleTypeCount() );
+}
+
+// Offset 044h bits 15:8, p.105. A capability mask whose bit positions are not
+// the encodings of the similarly named Flash Block Erase Size field at 040h.
+void TestTargetEraseBlockField()
+{
+    struct Expect
+    {
+        uint8_t bit;
+        const char* name;
+    };
+    const Expect table[] = {
+        { 2, "4 Kbytes" },
+        { 5, "32 Kbytes" },
+        { 6, "64 Kbytes" },
+        { 7, "128 Kbytes" },
+    };
+
+    const size_t rows = sizeof( table ) / sizeof( table[ 0 ] );
+    TEST_CHECK_EQ( TargetEraseBlockCount(), rows );
+    for( size_t i = 0; i < rows && i < TargetEraseBlockCount(); ++i )
+    {
+        const TargetEraseBlockBit& got = TargetEraseBlockAt( i );
+        if( std::string( got.name ) != table[ i ].name || got.bit != table[ i ].bit )
+            std::fprintf( stderr, "FAIL  erase block bit %zu: expected %s at %u, got %s at %u\n", i, table[ i ].name,
+                          table[ i ].bit, got.name, got.bit );
+        TEST_CHECK( std::string( got.name ) == table[ i ].name );
+        TEST_CHECK_EQ( got.bit, table[ i ].bit );
+    }
+
+    // Bits 0, 1, 3 and 4 are printed as Reserved. The gap in the middle is what
+    // says this is a mask rather than an encoded value -- no encoded field
+    // reserves 3 and 4 while defining 2, 5, 6 and 7.
+    TEST_CHECK_EQ( TargetEraseBlockReservedMask(), uint8_t( 0x1B ) );
+
+    // Named bits and reserved bits must between them account for the whole
+    // byte, and must not overlap.
+    uint8_t named = 0;
+    for( size_t i = 0; i < TargetEraseBlockCount(); ++i )
+        named = static_cast<uint8_t>( named | ( 1u << TargetEraseBlockAt( i ).bit ) );
+    TEST_CHECK_EQ( static_cast<uint8_t>( named & TargetEraseBlockReservedMask() ), uint8_t( 0 ) );
+    TEST_CHECK_EQ( static_cast<uint8_t>( named | TargetEraseBlockReservedMask() ), uint8_t( 0xFF ) );
+
+    // It is the 044h field and nothing else. 040h bits 4:2 have almost the same
+    // name and are an encoded value, so a predicate matching on width alone
+    // would rewrite that field's rendering too.
+    ConfigField fields[ 16 ];
+    size_t count = DecodeConfigRegister( 0x044, 0, fields, 16 );
+    size_t matched = 0;
+    for( size_t i = 0; i < count && i < 16; ++i )
+        if( IsTargetEraseBlockField( 0x044, fields[ i ] ) )
+            ++matched;
+    TEST_CHECK_EQ( matched, size_t( 1 ) );
+
+    count = DecodeConfigRegister( 0x040, 0, fields, 16 );
+    for( size_t i = 0; i < count && i < 16; ++i )
+        TEST_CHECK( !IsTargetEraseBlockField( 0x040, fields[ i ] ) );
+}
+
 } // namespace
 
 int main()
@@ -1490,6 +2007,14 @@ int main()
     TestCycleLengthRules();
     TestCycleVariableFields();
     TestMessageCodesAndLtr();
+    TestOobPackets();
+    TestOobSmbusPacket();
+    TestMctpHeader();
+    TestFlashPackets();
+    TestFlashEraseSizes();
+    TestChannel3ExtensionRegisters();
+    TestTargetEraseBlockField();
+    TestEveryCycleTypeHasAVector();
     TestWaitState();
     TestMalformed();
     TestFixtureLoaderRejectsGarbage();

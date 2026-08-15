@@ -2,8 +2,8 @@ Command
   Opcode  0x0C  not a defined command opcode [ERROR]
 ---
 Command
-  Opcode  0x06  PUT_OOB
-  Packet Shape  no shape transcribed for PUT_OOB -- packet length unknown, decode stopped [ERROR]
+  Opcode  0xFF  RESET
+  Packet Shape  no shape transcribed for RESET -- packet length unknown, decode stopped [ERROR]
 ---
 Command
   Opcode  0x21  GET_CONFIGURATION
@@ -87,3 +87,32 @@ Command
 Command
   Opcode  0x42  PUT_IORD_SHORT
   Request Length  C1C0 = 10b is Reserved -- packet length unknown, decode stopped [ERROR]
+---
+Command
+  Opcode  0x06  PUT_OOB
+  Cycle Type  0x00  no cycle type with this encoding on the OOB channel -- packet length unknown, decode stopped [ERROR]
+---
+Command
+  Opcode  0x06  PUT_OOB
+  Cycle Type  0x21  OOB (Tunneled SMBus) Message
+    Command Type  Posted
+    Direction  either direction
+  Tag  0x0
+  Length  0x008  8 bytes
+  SMBus Packet  8 bytes
+    Target Address  0x2C  address 0x16
+    Command Opcode  0x0F  MCTP
+    Byte Count  0x02  2 bytes, excluding the 3 SMBus header bytes and the PEC
+    SMBus Byte Count  Length 8 leaves 3 bytes after the 3 header bytes and 2 counted bytes, and the only byte allowed there is an optional PEC [ERROR]
+    Data  5 bytes  AA BB CC DD EE
+  CRC  0x73  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok

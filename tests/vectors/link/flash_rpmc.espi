@@ -1,0 +1,99 @@
+# The RPMC packets, Figure 50, p.76.
+#
+# HAND BUILT FROM THE SPECIFICATION. See flash_controller_attached.espi.
+#
+# RPMC is Replay Protected Monotonic Counter. Table 16, p.81, marks both rows
+# supported under Target Attached flash sharing and "No" under Controller
+# Attached, which is why every command below is a PUT_FLASH_NP -- and it agrees
+# with Table 5's Direction column, where both RPMC rows are Down only while
+# every other flash row is Up/Down.
+#
+# THE RPMC PACKETS DO NOT LOOK LIKE THE OTHER FLASH PACKETS. Figure 48 gives
+# Flash Read, Write and Erase a 7-byte header with a 32-bit address. Figure 50
+# gives RPMC Op.1 and Op.2 a 3-byte header and no address at all. Table 16
+# confirms it from the other direction: its Address Size column reads "N/A" for
+# both RPMC rows and "4 B" for the other three. Reusing the flash request layout
+# here would read four data bytes as an address and lose them.
+#
+# --- 1. RPMC Op.1, which carries data ---
+#
+#   0A     PUT_FLASH_NP                        Table 2, p.27
+#   23     Cycle Type: 0 R1R0 00011 with R1R0 = 01b -> 2nd RPMC flash device
+#
+#          The encoding on p.49 is "0R1R0 6 00011" -- the raised 6 is a FOOTNOTE
+#          MARKER sitting between R0 and the last five bits, and extraction
+#          renders it as an ordinary digit. Eight bits, with R1R0 at [6:5], so
+#          RPMC Op.1 spans 03h, 23h, 43h and 63h. Table 16 prints the same
+#          encoding as "0R1R0 00011" on p.81, which is an independent second
+#          reading of the worst cell in Table 5.
+#
+#          Note 6 heads its own table's column "P1P0" while the note text says
+#          R1R0. That is a typo in the specification: note 1 already defines
+#          P1P0 as the split completion field, and note 6's four rows describe
+#          flash devices.
+#
+#   50     Tag 5, Length[11:8] = 0h
+#   05     Length[7:0] = 05h -> 5 bytes       Table 16: "<= Max Payload Size"
+#   9B     Data Byte 0, which Figure 50 labels "RPMC Opcode: OP1"
+#
+#          The value a target expects is advertised in configuration register
+#          040h bits 31:24 for the 1st flash device, and in 048h and 04Ch for
+#          the 2nd through 4th. The decoder names the byte and leaves the
+#          comparison to a reader who has the configuration in front of them --
+#          it is not in this packet.
+#
+#   01 02 03 04   the rest of the data
+#   8A     CRC
+#
+# 03h is odd, so the cycle carries data, which is section 4.1.1's LSB rule on
+# p.46 agreeing with Figure 50's Data brace.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4).
+CMD 0A 23 50 05 9B 01 02 03 04 8A
+TAR
+RSP 08 0F 01 95
+
+# --- 2. RPMC Op.2, which carries none ---
+#
+#   0A     PUT_FLASH_NP
+#   04     Cycle Type: 0 R1R0 00100 with R1R0 = 00b -> 1st RPMC flash device
+#   60     Tag 6, Length[11:8] = 0h
+#   40     Length[7:0] = 40h -> 64 bytes requested
+#
+#          Table 16's Length column for the Op.2 row is "<= Max Read Request
+#          Size", not payload size -- Op.2 asks for data rather than carrying
+#          it, the same way a Flash Read does.
+#
+#   05     CRC
+#
+# Four bytes of command, and that is the whole packet: Figure 50 draws Flash
+# RPMC OP2 as a 3-byte header with no Data brace at all. 04h is even, so the
+# LSB rule says the same. Op.1 and Op.2 sitting on adjacent encodings with
+# opposite data-carrying is the sharpest check on this pair of rows there is.
+CMD 0A 04 60 40 05
+TAR
+RSP 08 0F 01 95
+
+# --- 3. GET_FLASH_C returning the Op.2 completion ---
+#
+#   0B     GET_FLASH_C
+#   31     CRC
+#
+#   08     ACCEPT
+#   0F     Cycle Type: Successful Completion With Data, P1P0 = 11b
+#   60     Tag 6, Length[11:8] = 0h            matches the Op.2 request
+#   02     Length[7:0] = 02h -> 2 bytes
+#   00 12  Data
+#   0F 01  Status
+#   58     CRC
+#
+# FIGURE 50 NAMES DATA BYTE 0 OF THIS PACKET "Extended Status" AND THE DECODE
+# DOES NOT. The completion carries the ordinary Successful Completion With Data
+# cycle type, shared with every flash read completion, so nothing on the wire
+# says the request it answers was an RPMC Op.2. Naming the byte would take
+# matching Tag 6 against the earlier transaction, which is transaction-layer
+# state this decoder does not keep. Recorded rather than guessed -- the same
+# call as leaving the GPIO expander direction as "configured per index".
+CMD 0B 31
+TAR
+RSP 08 0F 60 02 00 12 0F 01 58

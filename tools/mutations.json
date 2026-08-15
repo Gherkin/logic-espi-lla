@@ -10,7 +10,6 @@
     "refactor that silently stops applying a mutation is caught rather than",
     "quietly reported as killed."
   ],
-
   "mutations": [
     {
       "label": "crc: polynomial 0x07 -> 0x06",
@@ -117,7 +116,6 @@
       "replace": "X( GET_OOB, 0x07, 0xFF, Flash, false )",
       "tests": "test_opcodes"
     },
-
     {
       "label": "response: ACCEPT code 1000b -> 1001b",
       "file": "src/core/tables/Responses.h",
@@ -153,7 +151,6 @@
       "replace": "X( 0x1, \"Virtual Wire (channel 1) packet appended\" )",
       "tests": "test_link"
     },
-
     {
       "label": "status: PC_FREE moved off bit 0",
       "file": "src/core/tables/Status.h",
@@ -182,7 +179,6 @@
       "replace": "#define ESPI_STATUS_RESERVED_MASK 0xF000u",
       "tests": "test_link"
     },
-
     {
       "label": "shape: GET_CONFIGURATION response loses its data DWord",
       "file": "src/core/tables/PacketShapes.h",
@@ -211,7 +207,6 @@
       "replace": "X( GET_STATUS, ESPI_CMD( Addr16 ), ESPI_RSP( Status16 ) )",
       "tests": "test_link"
     },
-
     {
       "label": "shape: PUT_PC payload moved to the response phase",
       "file": "src/core/tables/PacketShapes.h",
@@ -247,7 +242,6 @@
       "replace": "X( PUT_MEMWR32_SHORT, ESPI_CMD( MemAddr32 ), ESPI_RSP( ShortData, Status16 ) )",
       "tests": "test_link"
     },
-
     {
       "label": "cycle: Memory Read 32 given the Memory Write 32 encoding",
       "file": "src/core/tables/CycleTypes.h",
@@ -312,13 +306,6 @@
       "tests": "test_link"
     },
     {
-      "label": "cycle: OOB packet layout claimed as transcribed",
-      "file": "src/core/tables/CycleTypes.h",
-      "find": "X( \"OOB (Tunneled SMBus) Message\", 0x21, 0xFF, Oob, UpOrDown, Posted, NotTranscribed, None )",
-      "replace": "X( \"OOB (Tunneled SMBus) Message\", 0x21, 0xFF, Oob, UpOrDown, Posted, MessageWithData, None )",
-      "tests": "test_link"
-    },
-    {
       "label": "cycle: split completion field read from bits [3:2]",
       "file": "src/core/tables/CycleTypes.h",
       "find": "#define ESPI_CYCLE_SPLIT_COMPLETION_SHIFT 1u",
@@ -367,7 +354,6 @@
       "replace": "X( 0x0, \"2nd RPMC flash device\" )",
       "tests": "test_link"
     },
-
     {
       "label": "length: all zeros read as zero rather than 4 KB",
       "file": "src/core/tables/CycleTypes.h",
@@ -389,40 +375,39 @@
       "replace": "#define ESPI_CYCLE_TAG_SHIFT 3u",
       "tests": "test_link"
     },
-
     {
       "label": "layout: Memory Read 64 given the 32-bit header",
       "file": "src/core/tables/CycleTypes.h",
-      "find": "X( MemoryRead64, \"Figure 36, p.54\", 11, 8, false, false, OneBased )",
-      "replace": "X( MemoryRead64, \"Figure 36, p.54\", 7, 4, false, false, OneBased )",
+      "find": "X( MemoryRead64, \"Figure 36, p.54\", 11, 8, false, false, OneBased, Opaque )",
+      "replace": "X( MemoryRead64, \"Figure 36, p.54\", 7, 4, false, false, OneBased, Opaque )",
       "tests": "test_link"
     },
     {
       "label": "layout: Memory Write 32 loses its payload",
       "file": "src/core/tables/CycleTypes.h",
-      "find": "X( MemoryWrite32, \"Figure 34, p.53\", 7, 4, false, true, OneBased )",
-      "replace": "X( MemoryWrite32, \"Figure 34, p.53\", 7, 4, false, false, OneBased )",
+      "find": "X( MemoryWrite32, \"Figure 34, p.53\", 7, 4, false, true, OneBased, Opaque )",
+      "replace": "X( MemoryWrite32, \"Figure 34, p.53\", 7, 4, false, false, OneBased, Opaque )",
       "tests": "test_link"
     },
     {
       "label": "layout: Message Length treated as an ordinary byte count",
       "file": "src/core/tables/CycleTypes.h",
-      "find": "X( Message, \"Figure 38, p.54\", 8, 0, true, false, Reserved )",
-      "replace": "X( Message, \"Figure 38, p.54\", 8, 0, true, false, OneBased )",
+      "find": "X( Message, \"Figure 38, p.54\", 8, 0, true, false, Reserved, Opaque )",
+      "replace": "X( Message, \"Figure 38, p.54\", 8, 0, true, false, OneBased, Opaque )",
       "tests": "test_link"
     },
     {
       "label": "layout: message header loses its 4 message specific bytes",
       "file": "src/core/tables/CycleTypes.h",
-      "find": "X( MessageWithData, \"Figure 38, p.54\", 8, 0, true, true, OneBased )",
-      "replace": "X( MessageWithData, \"Figure 38, p.54\", 3, 0, false, true, OneBased )",
+      "find": "X( MessageWithData, \"Figure 38, p.54\", 8, 0, true, true, OneBased, Opaque )",
+      "replace": "X( MessageWithData, \"Figure 38, p.54\", 3, 0, false, true, OneBased, Opaque )",
       "tests": "test_link"
     },
     {
       "label": "layout: Completion Without Data Length read as a byte count",
       "file": "src/core/tables/CycleTypes.h",
-      "find": "X( CompletionWithoutData, \"Figure 39, p.55\", 3, 0, false, false, MustBeZero )",
-      "replace": "X( CompletionWithoutData, \"Figure 39, p.55\", 3, 0, false, false, OneBased )",
+      "find": "X( CompletionWithoutData, \"Figure 39, p.55\", 3, 0, false, false, MustBeZero, Opaque )",
+      "replace": "X( CompletionWithoutData, \"Figure 39, p.55\", 3, 0, false, false, OneBased, Opaque )",
       "tests": "test_link"
     },
     {
@@ -439,7 +424,6 @@
       "replace": "#define ESPI_CYCLE_SHORT_MEMORY_ADDRESS_BYTES 2u",
       "tests": "test_link"
     },
-
     {
       "label": "ltr: Requirement bit read from bit 6",
       "file": "src/core/tables/CycleTypes.h",
@@ -496,7 +480,6 @@
       "replace": "X( 0x01, \"LTR\", \"Message\", 0x1, Up, true,",
       "tests": "test_link"
     },
-
     {
       "label": "config: Channel 1 register moved off offset 020h",
       "file": "src/core/tables/ConfigRegisters.h",
@@ -544,13 +527,6 @@
       "file": "src/core/tables/ConfigRegisters.h",
       "find": "X( 0x014, 0x01F, \"Reserved\", Reserved )",
       "replace": "X( 0x014, 0x02F, \"Reserved\", Reserved )",
-      "tests": "test_link"
-    },
-    {
-      "label": "config: Channel 3 extension registers claimed as decoded",
-      "file": "src/core/tables/ConfigRegisters.h",
-      "find": "X( 0x044, 0x047, \"Channel 3 Capabilities and Configurations 2\", NoFields )",
-      "replace": "X( 0x044, 0x047, \"Channel 3 Capabilities and Configurations 2\", Fields )",
       "tests": "test_link"
     },
     {
@@ -686,7 +662,6 @@
       "replace": "X( 0x030, 6, 4, \"OOB Message Channel Maximum Payload Size Selected\", MaxPayload, false, RW, Value, 1 )",
       "tests": "test_link"
     },
-
     {
       "label": "vwire: System Event range ends one index early",
       "file": "src/core/tables/VirtualWires.h",
@@ -867,6 +842,363 @@
       "file": "src/core/tables/VirtualWires.h",
       "find": "#define ESPI_VWIRE_IRQ_LEVEL_BIT 7u",
       "replace": "#define ESPI_VWIRE_IRQ_LEVEL_BIT 6u",
+      "tests": "test_link"
+    },
+    {
+      "label": "shape: PUT_OOB payload moved to the response phase",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "X( PUT_OOB, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )",
+      "replace": "X( PUT_OOB, ESPI_CMD( CycleHeader ), ESPI_RSP( Payload, Status16 ) )",
+      "tests": "test_link"
+    },
+    {
+      "label": "shape: GET_OOB response loses its packet",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "X( GET_OOB, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )",
+      "replace": "X( GET_OOB, ESPI_CMD(), ESPI_RSP( Status16 ) )",
+      "tests": "test_link"
+    },
+    {
+      "label": "shape: PUT_FLASH_C given GET_FLASH_NP's shape",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "X( PUT_FLASH_C, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )",
+      "replace": "X( PUT_FLASH_C, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )",
+      "tests": "test_link"
+    },
+    {
+      "label": "shape: GET_FLASH_NP request read from the command phase",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "X( GET_FLASH_NP, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )",
+      "replace": "X( GET_FLASH_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )",
+      "tests": "test_link"
+    },
+    {
+      "label": "shape: PUT_FLASH_NP answered with a completion, as PUT_NP is",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "X( PUT_FLASH_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )",
+      "replace": "X( PUT_FLASH_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( CycleHeader, Payload, Status16 ) )",
+      "tests": "test_link"
+    },
+    {
+      "label": "shape: GET_FLASH_C response loses its completion",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "X( GET_FLASH_C, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )",
+      "replace": "X( GET_FLASH_C, ESPI_CMD(), ESPI_RSP( Status16 ) )",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: OOB message layout swapped for the peripheral message layout",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( \"OOB (Tunneled SMBus) Message\", 0x21, 0xFF, Oob, UpOrDown, Posted, OobMessage, None )",
+      "replace": "X( \"OOB (Tunneled SMBus) Message\", 0x21, 0xFF, Oob, UpOrDown, Posted, MessageWithData, None )",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: Flash Read given the Flash Write layout",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( \"Flash Read\", 0x00, 0xFF, Flash, UpOrDown, NonPosted, FlashRead, None )",
+      "replace": "X( \"Flash Read\", 0x00, 0xFF, Flash, UpOrDown, NonPosted, FlashWrite, None )",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: Flash Erase length treated as an ordinary byte count",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( \"Flash Erase\", 0x02, 0xFF, Flash, UpOrDown, NonPosted, FlashErase, None )",
+      "replace": "X( \"Flash Erase\", 0x02, 0xFF, Flash, UpOrDown, NonPosted, FlashRead, None )",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: RPMC Op.1 given the addressed flash request layout",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( \"RPMC Op.1\", 0x03, 0x9F, Flash, Down, NonPosted, FlashRpmcOp1, RpmcTarget )",
+      "replace": "X( \"RPMC Op.1\", 0x03, 0x9F, Flash, Down, NonPosted, FlashWrite, RpmcTarget )",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: RPMC Op.2 given a data payload",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( \"RPMC Op.2\", 0x04, 0x9F, Flash, Down, NonPosted, FlashRpmcOp2, RpmcTarget )",
+      "replace": "X( \"RPMC Op.2\", 0x04, 0x9F, Flash, Down, NonPosted, FlashRpmcOp1, RpmcTarget )",
+      "tests": "test_link"
+    },
+    {
+      "label": "cycle: flash completion with data given the without-data layout",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( \"Successful Completion With Data\", 0x09, 0xF9, Flash, UpOrDown, Completion, FlashCompletionWithData,",
+      "replace": "X( \"Successful Completion With Data\", 0x09, 0xF9, Flash, UpOrDown, Completion, FlashCompletionWithoutData,",
+      "tests": "test_link"
+    },
+    {
+      "label": "layout: OOB header given the 7-byte addressed form",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( OobMessage, \"Figure 45, p.73\", 3, 0, false, true, OneBased, SmbusPacket )",
+      "replace": "X( OobMessage, \"Figure 45, p.73\", 7, 4, false, true, OneBased, SmbusPacket )",
+      "tests": "test_link"
+    },
+    {
+      "label": "layout: OOB payload treated as opaque bytes",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( OobMessage, \"Figure 45, p.73\", 3, 0, false, true, OneBased, SmbusPacket )",
+      "replace": "X( OobMessage, \"Figure 45, p.73\", 3, 0, false, true, OneBased, Opaque )",
+      "tests": "test_link"
+    },
+    {
+      "label": "layout: Flash Read loses its address field",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( FlashRead, \"Figure 48, p.75\", 7, 4, false, false, OneBased, Opaque )",
+      "replace": "X( FlashRead, \"Figure 48, p.75\", 3, 0, false, false, OneBased, Opaque )",
+      "tests": "test_link"
+    },
+    {
+      "label": "layout: Flash Write loses its payload",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( FlashWrite, \"Figure 48, p.75\", 7, 4, false, true, OneBased, Opaque )",
+      "replace": "X( FlashWrite, \"Figure 48, p.75\", 7, 4, false, false, OneBased, Opaque )",
+      "tests": "test_link"
+    },
+    {
+      "label": "layout: Flash Erase length read as a byte count",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( FlashErase, \"Figure 48, p.75\", 7, 4, false, false, BlockErase, Opaque )",
+      "replace": "X( FlashErase, \"Figure 48, p.75\", 7, 4, false, false, OneBased, Opaque )",
+      "tests": "test_link"
+    },
+    {
+      "label": "layout: RPMC Op.1 given the 7-byte addressed header",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( FlashRpmcOp1, \"Figure 50, p.76\", 3, 0, false, true, OneBased, RpmcOpcode )",
+      "replace": "X( FlashRpmcOp1, \"Figure 50, p.76\", 7, 4, false, true, OneBased, RpmcOpcode )",
+      "tests": "test_link"
+    },
+    {
+      "label": "layout: RPMC Op.1 data byte 0 no longer named as the opcode",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( FlashRpmcOp1, \"Figure 50, p.76\", 3, 0, false, true, OneBased, RpmcOpcode )",
+      "replace": "X( FlashRpmcOp1, \"Figure 50, p.76\", 3, 0, false, true, OneBased, Opaque )",
+      "tests": "test_link"
+    },
+    {
+      "label": "layout: RPMC Op.2 given a payload Figure 50 does not draw",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( FlashRpmcOp2, \"Figure 50, p.76\", 3, 0, false, false, OneBased, Opaque )",
+      "replace": "X( FlashRpmcOp2, \"Figure 50, p.76\", 3, 0, false, true, OneBased, Opaque )",
+      "tests": "test_link"
+    },
+    {
+      "label": "layout: flash completion without data given a byte-count length",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( FlashCompletionWithoutData, \"Figure 49, p.75\", 3, 0, false, false, MustBeZero, Opaque )",
+      "replace": "X( FlashCompletionWithoutData, \"Figure 49, p.75\", 3, 0, false, false, OneBased, Opaque )",
+      "tests": "test_link"
+    },
+    {
+      "label": "layout: flash read completion loses its data",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( FlashCompletionWithData, \"Figure 49, p.75\", 3, 0, false, true, OneBased, Opaque )",
+      "replace": "X( FlashCompletionWithData, \"Figure 49, p.75\", 3, 0, false, false, OneBased, Opaque )",
+      "tests": "test_link"
+    },
+    {
+      "label": "erase: 1h read as 4 KB on target attached flash, which is the other column",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 0x1, \"32 KB\", \"4 KB\" )",
+      "replace": "X( 0x1, \"4 KB\", \"4 KB\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "erase: 0h given a controller attached size the table reserves",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 0x0, \"4 KB\", \"\" )",
+      "replace": "X( 0x0, \"4 KB\", \"4 KB\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "erase: 3h given a controller attached size, ignoring 4.2.4.1's '011' rule",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 0x3, \"128 KB\", \"\" )",
+      "replace": "X( 0x3, \"128 KB\", \"128 KB\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "erase: 5h target attached column filled in",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 0x5, \"\", \"256 KB\" )",
+      "replace": "X( 0x5, \"256 KB\", \"256 KB\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "erase: 2h controller attached size changed",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 0x2, \"64 KB\", \"64 KB\" )",
+      "replace": "X( 0x2, \"64 KB\", \"32 KB\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "smbus: target address read as the whole byte",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_OOB_SMBUS_ADDRESS_SHIFT 1u",
+      "replace": "#define ESPI_OOB_SMBUS_ADDRESS_SHIFT 0u",
+      "tests": "test_link"
+    },
+    {
+      "label": "smbus: target address widened past bits [7:1]",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_OOB_SMBUS_ADDRESS_MASK 0x7Fu",
+      "replace": "#define ESPI_OOB_SMBUS_ADDRESS_MASK 0xFFu",
+      "tests": "test_link"
+    },
+    {
+      "label": "smbus: SMBus header counted as 4 bytes, so the PEC arithmetic shifts",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_OOB_SMBUS_HEADER_BYTES 3u",
+      "replace": "#define ESPI_OOB_SMBUS_HEADER_BYTES 4u",
+      "tests": "test_link"
+    },
+    {
+      "label": "smbus: byte 3 bit 0 expected as 1 rather than 0",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_OOB_SMBUS_ADDRESS_BIT0_EXPECTED 0u",
+      "replace": "#define ESPI_OOB_SMBUS_ADDRESS_BIT0_EXPECTED 1u",
+      "tests": "test_link"
+    },
+    {
+      "label": "smbus: MCTP command opcode 0Fh -> 0Eh",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_OOB_SMBUS_COMMAND_TABLE( X ) X( 0x0F, \"MCTP\", 5 )",
+      "replace": "#define ESPI_OOB_SMBUS_COMMAND_TABLE( X ) X( 0x0E, \"MCTP\", 5 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "smbus: MCTP header counted as 3 bytes rather than 5",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_OOB_SMBUS_COMMAND_TABLE( X ) X( 0x0F, \"MCTP\", 5 )",
+      "replace": "#define ESPI_OOB_SMBUS_COMMAND_TABLE( X ) X( 0x0F, \"MCTP\", 3 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "mctp: source address read as the whole byte",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 0, 7, 1, \"Source Target Address\" )",
+      "replace": "X( 0, 7, 0, \"Source Target Address\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "mctp: header version and reserved halves swapped",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 1, 7, 4, \"MCTP Reserved\" )",
+      "replace": "X( 1, 7, 4, \"Header Version\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "mctp: destination and source endpoint IDs swapped",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 2, 7, 0, \"Destination Endpoint ID\" )",
+      "replace": "X( 2, 7, 0, \"Source Endpoint ID\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "mctp: packet sequence read as one bit rather than two",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 4, 5, 4, \"Packet Seq#\" )",
+      "replace": "X( 4, 5, 5, \"Packet Seq#\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "mctp: message tag widened over the TO bit",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 4, 2, 0, \"Message Tag\" )",
+      "replace": "X( 4, 3, 0, \"Message Tag\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "mctp: SOM and EOM bits swapped",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "X( 4, 7, 7, \"SOM\" )",
+      "replace": "X( 4, 7, 7, \"EOM\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "mctp: source byte bit 0 expected as 0 rather than 1",
+      "file": "src/core/tables/CycleTypes.h",
+      "find": "#define ESPI_OOB_MCTP_SOURCE_BIT0_EXPECTED 1u",
+      "replace": "#define ESPI_OOB_MCTP_SOURCE_BIT0_EXPECTED 0u",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: 044h claimed as a range with no field layout",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x044, 0x047, \"Channel 3 Capabilities and Configurations 2\", Fields )",
+      "replace": "X( 0x044, 0x047, \"Channel 3 Capabilities and Configurations 2\", NoFields )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: 04Ch 3rd and 4th RPMC device halves swapped",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x04C, 31, 24, \"RPMC OP1 Opcode on the 4th RPMC Flash device\", None, false, RO, HwInit, 0 )",
+      "replace": "X( 0x04C, 31, 24, \"RPMC OP1 Opcode on the 3rd RPMC Flash device\", None, false, RO, HwInit, 0 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: 048h RPMC counter no longer 0-based",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x048, 23, 20, \"RPMC Counter on the 2nd RPMC Flash device\", None, true, RO, HwInit, 0 )",
+      "replace": "X( 0x048, 23, 20, \"RPMC Counter on the 2nd RPMC Flash device\", None, false, RO, HwInit, 0 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: Target RPMC Supported treated as a 0-based count",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x044, 21, 16, \"Target RPMC Supported\", None, false, RO, HwInit, 0 )",
+      "replace": "X( 0x044, 21, 16, \"Target RPMC Supported\", None, true, RO, HwInit, 0 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: Target Maximum Read Request Size given the other read-request table",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x044, 2, 0, \"Target Maximum Read Request Size Supported\", TargetMaxReadRequest, false, RO, HwInit, 0 )",
+      "replace": "X( 0x044, 2, 0, \"Target Maximum Read Request Size Supported\", MaxReadRequest, false, RO, HwInit, 0 )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: RPMC device count 10b decoded as 2 devices",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( RpmcDeviceCount, 0x2, \"3 RPMC flash devices\" )",
+      "replace": "X( RpmcDeviceCount, 0x2, \"2 RPMC flash devices\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: target max read request 100b decoded as 256 bytes",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( TargetMaxReadRequest, 0x4, \"512 bytes\" )",
+      "replace": "X( TargetMaxReadRequest, 0x4, \"256 bytes\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: target max read request 000b treated as Reserved",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( TargetMaxReadRequest, 0x0, \"64 bytes\" )",
+      "replace": "X( TargetMaxReadRequest, 0x0, \"Reserved\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: 4 Kbytes erase capability moved off field bit 2",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 2, \"4 Kbytes\" )",
+      "replace": "X( 3, \"4 Kbytes\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: 32 and 64 Kbytes erase capability bits swapped",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 5, \"32 Kbytes\" )",
+      "replace": "X( 5, \"64 Kbytes\" )",
+      "tests": "test_link"
+    },
+    {
+      "label": "config: target erase block reserved mask loses field bits 3 and 4",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "#define ESPI_TARGET_ERASE_BLOCK_RESERVED_MASK 0x1Bu",
+      "replace": "#define ESPI_TARGET_ERASE_BLOCK_RESERVED_MASK 0x03u",
       "tests": "test_link"
     }
   ]

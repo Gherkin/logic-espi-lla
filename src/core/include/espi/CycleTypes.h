@@ -45,6 +45,7 @@ enum class CycleDirection : uint8_t
 // Which packet format figure a cycle type points at.
 enum class CycleLayout : uint8_t
 {
+    // --- peripheral channel, Figures 34-39, pp.53-55 ---
     MemoryRead32,
     MemoryRead64,
     MemoryWrite32,
@@ -54,11 +55,31 @@ enum class CycleLayout : uint8_t
     CompletionWithData,
     CompletionWithoutData,
 
+    // --- OOB message channel, Figure 45, p.73 ---
+    OobMessage,
+
+    // --- flash access channel, Figures 48-50, pp.75-76 ---
+    //
+    // The completions are drawn by Figure 49 exactly as Figure 39 draws the
+    // peripheral ones, and section 4.2.4 states it: "The Flash Access channel
+    // uses the same packet format as the eSPI Peripheral Channel transactions"
+    // (p.75). They are separate values anyway so each row cites the one figure
+    // it was checked against.
+    FlashRead,
+    FlashWrite,
+    FlashErase,
+    FlashRpmcOp1,
+    FlashRpmcOp2,
+    FlashCompletionWithData,
+    FlashCompletionWithoutData,
+
     // The row's figure has not been read yet. This is a gap in the
     // transcription, not a gap in the specification, and it is a different
     // answer from either of those -- the decoder names the cycle type and
-    // stops rather than inventing a header length. The OOB and flash rows are
-    // here until stage E.
+    // stops rather than inventing a header length.
+    //
+    // No row carries this now. It is kept because it is the mechanism that
+    // keeps the next gap a gap instead of a guess.
     NotTranscribed,
 };
 
@@ -81,6 +102,21 @@ enum class CycleLength : uint8_t
     OneBased,   // 1-based; a value of all zeros is 4 KB, not zero
     MustBeZero, // driven to zeros by the initiator, ignored by the receiver
     Reserved,   // Message cycle type: reserved, sent as all 0s
+
+    // Flash Erase. Not a byte count: the field carries an erase block size
+    // encoding, and which size a given encoding names depends on the flash
+    // sharing scheme in operation, which never appears on the bus. Table 16,
+    // p.81; section 4.1.3 p.50 forwards to 4.2.4.1 and 4.2.4.2 rather than
+    // stating it.
+    BlockErase,
+};
+
+// Whether the data bytes after a header have a transcribed structure.
+enum class CyclePayload : uint8_t
+{
+    Opaque,      // data bytes with no structure this document gives
+    SmbusPacket, // Figure 45, p.73 -- the tunneled SMBus block write
+    RpmcOpcode,  // Figure 50, p.76 -- data byte 0 is the RPMC OP1 opcode
 };
 
 struct CycleTypeInfo
@@ -125,6 +161,7 @@ struct CycleHeaderLayout
     bool has_message_code = false; // message code plus 4 message specific bytes
     bool has_payload = false;      // data bytes follow the header
     CycleLength length = CycleLength::OneBased;
+    CyclePayload payload = CyclePayload::Opaque;
 };
 
 // Returns false for CycleLayout::NotTranscribed, which is the only layout with
@@ -192,6 +229,95 @@ LtrMessage DecodeLtrMessage( uint8_t byte4, uint8_t byte5 );
 // returning a multiplier the specification never gave.
 bool LtrScaleNanoseconds( uint8_t scale, uint32_t* out );
 const char* LtrScaleText( uint8_t scale );
+
+// ---------------------------------------------------------------------------
+//  Table 16, p.81 -- the Flash Erase block size encodings.
+//
+//  Two answers for one encoding, because Table 16 prints two lists in one cell
+//  and the flash sharing scheme that picks between them is set in a
+//  configuration register, not carried in the packet. A decoder that reported
+//  only one of them would be right half the time and silent about it.
+// ---------------------------------------------------------------------------
+struct FlashEraseSize
+{
+    // Null where Table 16 prints Reserved for that scheme. Both null means the
+    // encoding is Reserved either way, which is every value above 5h.
+    const char* target_attached = nullptr;
+    const char* controller_attached = nullptr;
+};
+
+// The two readings of a Flash Erase Length field. Both members are null for an
+// encoding Table 16 reserves on both sides.
+FlashEraseSize LookupFlashEraseSize( uint16_t length_field );
+
+// ---------------------------------------------------------------------------
+//  Figure 45, p.73 and section 4.2.3 -- the OOB tunneled SMBus packet.
+//
+//  Every field here is inside the OOB packet's *data*, not its header: the
+//  header is the ordinary three bytes and the SMBus packet starts at byte 3.
+// ---------------------------------------------------------------------------
+struct SmbusPacketInfo
+{
+    uint8_t address = 0;      // SMBus Target Address, byte 3 bits [7:1]
+    uint8_t address_bit0 = 0; // byte 3 bit 0, drawn as a literal 0
+    uint8_t command = 0;      // SMBus Command Opcode, byte 4
+    uint8_t byte_count = 0;   // SMBus Byte Count, byte 5
+
+    // Length - 3 - byte_count. The specification allows 0 or 1; anything else
+    // is a packet whose two length statements disagree.
+    int pec_bytes = 0;
+    bool consistent = false; // pec_bytes is 0 or 1
+};
+
+// Resolve the three SMBus header bytes against the OOB header's Length field.
+// `length` is the resolved byte count of the whole OOB data region.
+SmbusPacketInfo DecodeSmbusPacket( unsigned length, uint8_t byte3, uint8_t byte4, uint8_t byte5 );
+
+// Bytes the SMBus header occupies inside the OOB data region.
+unsigned SmbusHeaderBytes();
+
+// Byte 3 bit 0, which Figure 45 draws as a literal 0.
+uint8_t SmbusAddressBit0Expected();
+
+// How wide the SMBus Target Address field is. Figure 45 gives it bits [7:1],
+// so 7 -- and the shift alone cannot say that, because shifting a byte right by
+// one already fits in seven bits. The width has to be read out of the table for
+// anything to depend on it.
+unsigned SmbusAddressBits();
+
+// An SMBus Command Opcode the specification names. Returns false for a code it
+// does not -- the base spec names exactly one, MCTP.
+struct SmbusCommandInfo
+{
+    uint8_t code = 0;
+    const char* name = nullptr;
+    uint8_t header_bytes = 0; // bytes the embedded protocol spends on its header
+};
+bool LookupSmbusCommand( uint8_t code, SmbusCommandInfo* out );
+
+// ---------------------------------------------------------------------------
+//  Figure 46, p.74 -- the five MCTP header bytes.
+//
+//  The names are eSPI's, read off the figure. The meanings are MCTP's and this
+//  document never gives them, so the decoder prints a name and a number and
+//  makes no claim about what the number signifies.
+// ---------------------------------------------------------------------------
+struct MctpHeaderField
+{
+    uint8_t byte = 0; // offset within the MCTP header, so 0 is packet byte 6
+    uint8_t high = 0;
+    uint8_t low = 0;
+    const char* name = nullptr;
+    uint32_t value = 0;
+};
+
+// Split the five MCTP header bytes into named fields, most significant first.
+// Returns how many fields there are; writes up to `capacity`.
+size_t DecodeMctpHeader( const uint8_t bytes[ 5 ], MctpHeaderField* out, size_t capacity );
+
+// Byte 0 bit 0 of the MCTP header, which Figure 46 draws as a literal 1.
+uint8_t MctpSourceBit0( uint8_t byte0 );
+uint8_t MctpSourceBit0Expected();
 
 // ---------------------------------------------------------------------------
 //  Names for the enumerations above, so the decoder's wording lives next to

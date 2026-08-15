@@ -1,0 +1,89 @@
+# Controller Attached Flash Sharing: GET_FLASH_NP and PUT_FLASH_C.
+#
+# HAND BUILT FROM THE SPECIFICATION. The capture has no flash traffic -- it
+# never even enables the channel -- so nothing here has independent evidence
+# behind it.
+#
+# THE TWO OPCODES ARE A PAIR AND THE PAIRING IS THE POINT. Section 4.2.4.1,
+# p.78: "The Controller Attached Flash Sharing scheme uses 2 dedicated eSPI
+# command opcodes: GET_FLASH_NP and PUT_FLASH_C." The flash sits on the
+# controller, the target asks for access, and the controller answers in a
+# *separate transaction* later.
+#
+# That is why neither response phase below carries a completion, and it is the
+# one place these packets differ from their peripheral equivalents. PUT_NP does
+# get a completion back in its own response phase -- Figure 24, p.38, captioned
+# "Connected Controller Initiated Non-Posted Transaction". Copying that here is
+# the obvious mistake, and the giveaway that it is wrong is that the flash
+# channel would not need PUT_FLASH_C or the FLASH_C_FREE status bit if it were
+# true.
+#
+# --- 1. GET_FLASH_NP: the target issues a Flash Read request ---
+#
+# "Used in Controller Attached Flash Sharing mode for the target to issue a
+# flash access request to the controller" (Table 2, p.26). So the *response*
+# phase carries the request, the same way GET_NP's does in Figure 27, p.41.
+#
+#   09     GET_FLASH_NP                        Table 2, p.26
+#   3F     CRC
+#
+#   08     ACCEPT
+#   00     Cycle Type: Flash Read              Table 5, p.48
+#
+#          00h is ALSO Memory Read 32 on the peripheral channel. Table 5 note 3,
+#          p.49, allows that outright, and Table 16 on p.81 lists 00h as Read
+#          again, so the encoding is confirmed twice on two pages. A lookup
+#          keyed by the byte alone reports a memory read here.
+#
+#   20     Tag 2, Length[11:8] = 0h
+#   40     Length[7:0] = 40h -> 64 bytes requested
+#
+#          A read request has a Length and no payload: section 4.1.3, p.50,
+#          "For memory read and Flash Read, the length field specifies the data
+#          payload size requested." Table 16's Length column for the 00h row is
+#          "<= Max Read Request Size", which is register 040h bits 14:12.
+#
+#   00 FF 00 00   Address, most significant byte first    Figure 48, p.75
+#
+#          Seven header bytes, not three: Figure 48 gives Flash Read the same
+#          7-byte header as Flash Write, address included.
+#
+#   0F 01  Status
+#   9F     CRC
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4).
+CMD 09 3F
+TAR
+RSP 08 00 20 40 00 FF 00 00 0F 01 9F
+
+# --- 2. PUT_FLASH_C: the controller returns the completion ---
+#
+# "Used in Controller Attached Flash Sharing mode for the controller to return
+# a flash access completion to the target" (Table 2, p.26). The command phase
+# carries the completion and the response is only status, which is the shape
+# Figure 27 p.41 draws for the peripheral PUT_PC completion.
+#
+#   08     PUT_FLASH_C                         Table 2, p.26
+#   0F     Cycle Type: 00001 P1P0 1 with P1P0 = 11b
+#          Successful Completion With Data, "only completion for a split
+#          completion sequence" -- Table 5 p.48 and note 1 p.49. The raised 1
+#          between P0 and the last bit on the page is a footnote marker.
+#   20     Tag 2, Length[11:8] = 0h            matches the request's tag
+#
+#          "The Tag field is used to match the completion with the request.
+#          Flash access requests with the same tag must be completed in order"
+#          (section 4.2.4, p.75).
+#
+#   04     Length[7:0] = 04h -> 4 bytes
+#   AA BB CC DD   Data                         Figure 49, p.75
+#
+#          Three header bytes here, not seven. A completion has no address --
+#          Figure 49 draws it exactly as Figure 39 draws the peripheral one,
+#          which is what section 4.2.4 p.75 means by "The Flash Access channel
+#          uses the same packet format as the eSPI Peripheral Channel
+#          transactions".
+#
+#   BC     CRC
+CMD 08 0F 20 04 AA BB CC DD BC
+TAR
+RSP 08 0F 01 95

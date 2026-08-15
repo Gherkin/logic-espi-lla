@@ -35,9 +35,10 @@
 //  carrying an appended packet ahead of the status trailer, selected by R1R0
 //  in the response byte (Table 3 Note 1, p.30). The row below gives the
 //  unappended shape; the decoder inserts the appended packet when the modifier
-//  calls for one. Only the virtual wire append is transcribed -- a peripheral
-//  or flash completion needs the cycle-type header layouts, which are not
-//  transcribed yet, and is reported as an explicit gap.
+//  calls for one. All three appends resolve now that the peripheral and flash
+//  completion layouts are transcribed -- the modifier also decides which
+//  channel's cycle type table the appended header is read against, because
+//  GET_STATUS itself is channel independent.
 //
 //  WHICH PHASE CARRIES THE PACKET is read off the transaction diagrams in
 //  section 3, not guessed from the opcode's name. Four figures decide the
@@ -82,6 +83,80 @@
 //  tag, no length -- while Figure 24 draws the long form's response with a
 //  full header. The two are eight lines apart in the same section and are the
 //  obvious pair to flatten into one shape.
+//
+//  --- OOB AND FLASH: WHY THERE IS NO FIGURE, AND WHAT WAS USED INSTEAD ---
+//
+//  Section 3 draws no transaction for PUT_OOB, GET_OOB or any flash opcode.
+//  Every figure in 3.8 and 3.9 uses a peripheral opcode. So the six rows below
+//  rest on two things that are stated rather than drawn.
+//
+//  The general shape is stated by Figures 62 and 63, p.117, in the error
+//  handling section -- the only figures in the document that draw a *generic*
+//  transaction. Both label the command phase `CMD | HDR (Optional) | DATA
+//  (Optional) | CRC` and the response phase `<error> | STS | CRC`. That is the
+//  present-only-on-ACCEPT rule stated for every opcode rather than inferred
+//  from the two peripheral figures that happen to show it. The same page says
+//  it in words as well, which is better than a figure: "The Response with
+//  Non-Fatal Error comprises a Response, a Status and a CRC. There is neither
+//  Header nor Data field during the Response phase."
+//
+//  Which phase carries the packet comes from Table 2's own descriptions,
+//  pp.26-27, which are unusually explicit for these six:
+//
+//    PUT_OOB       "Put an OOB (Tunneled SMBus) message."
+//    GET_OOB       "Get an OOB (Tunneled SMBus) message."
+//    PUT_FLASH_C   "Put a Flash Access completion. Used in Controller Attached
+//                   Flash Sharing mode for the controller to return a flash
+//                   access completion to the target."
+//    GET_FLASH_NP  "Get a non-posted Flash Access request. Used in Controller
+//                   Attached Flash Sharing mode for the target to issue a flash
+//                   access request to the controller."
+//    PUT_FLASH_NP  "Put a non-posted Flash Access request. Used in Target
+//                   Attached Flash Sharing mode for the controller to issue a
+//                   flash access request to the target."
+//    GET_FLASH_C   "Get a Flash Access completion. Used in Target Attached
+//                   Flash Sharing mode for the target to return a flash access
+//                   completion to the controller."
+//
+//  NO FLASH OPCODE CARRIES A COMPLETION IN ITS RESPONSE PHASE, which is the
+//  one place these rows differ from the peripheral ones and the one worth
+//  being sure about. PUT_NP does carry a completion on ACCEPT -- Figure 24 is
+//  captioned "Connected Controller Initiated Non-Posted Transaction" and shows
+//  `PUT_NP HDR CRC -> ACCEPT HDR DATA STS CRC`. Copying that to PUT_FLASH_NP
+//  would be the obvious move and it is wrong.
+//
+//  The evidence is that the flash channel has *dedicated completion opcodes*
+//  and *dedicated status bits to gate them*, which would be pointless if the
+//  completion came back in the request's own response phase. Table 2, p.27:
+//  "It is illegal to issue a GET_FLASH_C unless the target has indicated that
+//  it has a Flash Access completion available to send" -- that indication is
+//  FLASH_C_AVAIL, status bit 12, which section 3.4.2 p.32 says is "only
+//  applicable when target attached flash sharing is supported and in
+//  operation". The completion is fetched in a later transaction. Section
+//  4.2.4.2.1, p.82, describes the queue that makes that necessary: the target
+//  "is required to maintain a separate queue for flash access commands" and
+//  keeps FLASH_NP_FREE true "unless its corresponding queue is full".
+//
+//  So the four flash opcodes are two request/completion pairs, one per sharing
+//  scheme, and the schemes are mutually exclusive on an interface (4.2.4.2,
+//  p.79):
+//
+//    Controller Attached   target has a request  -> GET_FLASH_NP  (FLASH_NP_AVAIL)
+//                          controller answers    -> PUT_FLASH_C   (FLASH_C_FREE)
+//    Target Attached       controller requests   -> PUT_FLASH_NP  (FLASH_NP_FREE)
+//                          target has an answer  -> GET_FLASH_C   (FLASH_C_AVAIL)
+//
+//  PUT_OOB is posted -- Table 5 gives the OOB cycle type Command Type
+//  "Posted" -- so its response is the posted form of Figure 28: ACCEPT, status,
+//  CRC, nothing else.
+//
+//  ONE CROSS-REFERENCE IN TABLE 2 IS STALE, noted so the next reader does not
+//  chase it. PUT_VWIRE and GET_VWIRE say "Refer to Figure 40 for the packet
+//  format", but Figure 40 on p.56 is the LTR Message Format and the virtual
+//  wire packet is Figure 41 on p.58. PUT_MEMWR32_SHORT says "Refer to Figure
+//  37", which is the short *read* format; the short write is Figure 35. Every
+//  figure number in this repository is the number printed on the page the
+//  figure is on, not the number some other table points at.
 // ---------------------------------------------------------------------------
 
 // X( OPCODE_NAME, COMMAND_ELEMENTS, RESPONSE_ELEMENTS )
@@ -102,6 +177,15 @@
     X( PUT_IORD_SHORT, ESPI_CMD( IoAddr16 ), ESPI_RSP( ShortData, Status16 ) )                                                     \
     X( PUT_IOWR_SHORT, ESPI_CMD( IoAddr16, ShortData ), ESPI_RSP( Status16 ) )                                                     \
     X( PUT_MEMRD32_SHORT, ESPI_CMD( MemAddr32 ), ESPI_RSP( ShortData, Status16 ) )                                                 \
-    X( PUT_MEMWR32_SHORT, ESPI_CMD( MemAddr32, ShortData ), ESPI_RSP( Status16 ) )
+    X( PUT_MEMWR32_SHORT, ESPI_CMD( MemAddr32, ShortData ), ESPI_RSP( Status16 ) )                                                 \
+    /* --- OOB Message Channel, Table 2 p.26, Figures 62-63 p.117 --- */                                                           \
+    X( PUT_OOB, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )                                                           \
+    X( GET_OOB, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )                                                           \
+    /* --- Flash Access Channel, Controller Attached, Table 2 pp.26-27 --- */                                                      \
+    X( PUT_FLASH_C, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )                                                       \
+    X( GET_FLASH_NP, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )                                                      \
+    /* --- Flash Access Channel, Target Attached, Table 2 p.27 --- */                                                              \
+    X( PUT_FLASH_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )                                                      \
+    X( GET_FLASH_C, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )
 
 #endif // ESPI_TABLE_PACKET_SHAPES_H

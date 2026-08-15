@@ -1,0 +1,60 @@
+# GET_OOB returning an MCTP packet.
+#
+# HAND BUILT FROM THE SPECIFICATION. See put_oob_smbus.espi.
+#
+# GET_OOB is the mirror of PUT_OOB: the command is bare and the response carries
+# the packet. Table 2, p.26, is the whole of the evidence -- "Get an OOB
+# (Tunneled SMBus) message" -- because section 3 draws no OOB transaction at
+# all. Figures 62 and 63 on p.117 give the generic shape.
+#
+#   07     GET_OOB                             Table 2, p.26
+#   15     CRC
+#
+#   08     ACCEPT
+#   21     Cycle Type: OOB (Tunneled SMBus) Message
+#   00     Tag 0, Length[11:8] = 0h
+#   0D     Length[7:0] = 0Dh -> 13 bytes
+#
+#   10     Destination Target Address 08h, bit 0 = 0
+#   0F     SMBus Command Opcode = MCTP        Figure 46, p.74, and p.73:
+#          "MCTP over SMBus is a specific form of the SMBus block write packet
+#          with the SMBus Command Opcode of 0Fh (i.e. MCTP)."
+#   09     SMBus Byte Count = 9
+#
+#          The Byte Count INCLUDES the MCTP header. Figure 46's worked example
+#          is Byte Count = (5+64) = 69 for a 64 byte MCTP payload, and the note
+#          beside it says the PEC byte is excluded. So 9 here is 5 header bytes
+#          plus a 4 byte payload, and a decoder that read the Byte Count as the
+#          payload alone would run 5 bytes past the end of the data.
+#
+#   21     MCTP header byte 0: Source Target Address 10h, bit 0 = 1
+#          Figure 46 draws this bit as a literal '1' where Figure 45 draws the
+#          destination byte's as a literal '0'. Same cell, opposite value, and
+#          it is what makes clear the cell is a bit rather than address.
+#   01     MCTP header byte 1: MCTP Reserved [7:4] = 0h, Header Version [3:0] = 1h
+#   0A     MCTP header byte 2: Destination Endpoint ID
+#   1C     MCTP header byte 3: Source Endpoint ID
+#   C8     MCTP header byte 4: 1100 1000
+#          SOM [7] = 1, EOM [6] = 1, Packet Seq# [5:4] = 00b, TO [3] = 1,
+#          Message Tag [2:0] = 000b.
+#
+#          THOSE FIVE BIT RANGES ARE READ OFF CELL BORDERS, not off printed bit
+#          numbers -- Figure 46 gives byte 10 no numbers, only five boxes lined
+#          up under the 7|6|5|4|3|2|1|0 ruler. Every other bit range in this
+#          repository comes from a number printed on the page. This one does
+#          not, and the QC sheet says so.
+#
+#   DE AD BE EF   the 4 byte MCTP payload
+#   5C     PEC        Length 13 = 3 + 9 + 1, so the trailing byte is a PEC
+#
+#   0F 01  Status
+#   0E     CRC
+#
+# The MCTP field values mean nothing here on purpose. Figure 46 labels the cells
+# and never says what any value signifies -- that is DSP0237, which is not in
+# this database -- so the decode prints a name and a number and stops.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4).
+CMD 07 15
+TAR
+RSP 08 21 00 0D 10 0F 09 21 01 0A 1C C8 DE AD BE EF 5C 0F 01 0E

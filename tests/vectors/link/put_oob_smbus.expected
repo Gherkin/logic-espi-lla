@@ -1,0 +1,48 @@
+Command
+  Opcode  0x06  PUT_OOB
+  Cycle Type  0x21  OOB (Tunneled SMBus) Message
+    Command Type  Posted
+    Direction  either direction
+  Tag  0x0
+  Length  0x008  8 bytes
+  SMBus Packet  8 bytes
+    Target Address  0x2C  address 0x16
+    Command Opcode  0x04  not a command opcode this specification names
+    Byte Count  0x04  4 bytes, excluding the 3 SMBus header bytes and the PEC
+    Data  4 bytes  11 22 33 44
+    PEC  0xB7
+  CRC  0x78  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok
+---
+Command
+  Opcode  0x06  PUT_OOB
+  Cycle Type  0x21  OOB (Tunneled SMBus) Message
+    Command Type  Posted
+    Direction  either direction
+  Tag  0x1
+  Length  0x007  7 bytes
+  SMBus Packet  7 bytes
+    Target Address  0x2C  address 0x16
+    Command Opcode  0x04  not a command opcode this specification names
+    Byte Count  0x04  4 bytes, excluding the 3 SMBus header bytes and the PEC
+    Data  4 bytes  11 22 33 44
+  CRC  0x19  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok

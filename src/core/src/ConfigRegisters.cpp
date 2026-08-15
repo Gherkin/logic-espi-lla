@@ -64,6 +64,10 @@ const FieldEntry kFields[] = { ESPI_CONFIG_FIELD_TABLE( ESPI_FIELD_ENTRY ) };
 const ChannelSupportBit kChannels[] = { ESPI_CHANNEL_SUPPORTED_TABLE( ESPI_CHANNEL_ENTRY ) };
 #undef ESPI_CHANNEL_ENTRY
 
+#define ESPI_ERASE_BLOCK_ENTRY( BIT, NAME ) TargetEraseBlockBit{ BIT, NAME },
+const TargetEraseBlockBit kEraseBlocks[] = { ESPI_TARGET_ERASE_BLOCK_TABLE( ESPI_ERASE_BLOCK_ENTRY ) };
+#undef ESPI_ERASE_BLOCK_ENTRY
+
 const char* LookupEnum( const char* group, uint32_t value )
 {
     if( std::strcmp( group, "None" ) == 0 )
@@ -214,6 +218,26 @@ uint8_t ChannelSupportPlatformMask()
 bool IsChannelSupportedField( uint16_t address, const ConfigField& field )
 {
     return ( address & ESPI_CONFIG_ADDRESS_SELECT_MASK ) == 0x008 && field.high == 7 && field.low == 0;
+}
+
+size_t TargetEraseBlockCount()
+{
+    return sizeof( kEraseBlocks ) / sizeof( kEraseBlocks[ 0 ] );
+}
+
+const TargetEraseBlockBit& TargetEraseBlockAt( size_t index )
+{
+    return kEraseBlocks[ index ];
+}
+
+uint8_t TargetEraseBlockReservedMask()
+{
+    return ESPI_TARGET_ERASE_BLOCK_RESERVED_MASK;
+}
+
+bool IsTargetEraseBlockField( uint16_t address, const ConfigField& field )
+{
+    return ( address & ESPI_CONFIG_ADDRESS_SELECT_MASK ) == 0x044 && field.high == 15 && field.low == 8;
 }
 
 } // namespace espi

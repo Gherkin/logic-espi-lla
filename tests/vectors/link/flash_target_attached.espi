@@ -1,0 +1,123 @@
+# Target Attached Flash Sharing: PUT_FLASH_NP and GET_FLASH_C.
+#
+# HAND BUILT FROM THE SPECIFICATION. See flash_controller_attached.espi.
+#
+# The other pair, and the mirror image of it. Section 4.2.4.2, p.79: "The Target
+# Attached Flash Sharing scheme uses 2 dedicated eSPI command opcodes:
+# PUT_FLASH_NP and GET_FLASH_C." (The page cites "Table 3" for those opcodes.
+# Table 3 is the Response Field Encodings; the opcodes are Table 2. Section
+# 4.2.4.1 cites Table 2 correctly for the other pair eight lines earlier.)
+#
+# The flash sits behind the target, the controller asks, the target answers in a
+# separate transaction. The two schemes are "mutually exclusive for a given eSPI
+# interface" (p.79) and which one is in operation is register 040h bit 11 --
+# which matters below, because it decides what an erase Length means.
+#
+# --- 1. PUT_FLASH_NP carrying a Flash Erase: the Length is not a byte count ---
+#
+#   0A     PUT_FLASH_NP                        Table 2, p.27
+#   02     Cycle Type: Flash Erase             Table 5, p.48
+#          Also Memory Read 64 on the peripheral channel.
+#   30     Tag 3, Length[11:8] = 0h
+#   01     Length[7:0] = 01h
+#
+#          NOT ONE BYTE. Table 16, p.81, gives the 02h row a Length column that
+#          is an erase block size encoding, and prints two lists in the one
+#          cell:
+#
+#              Target Attached      Controller Attached
+#              0h: 4 KB             0h: Reserved
+#              1h: 32 KB            1h: 4 KB
+#              2h: 64 KB            2h: 64 KB
+#              3h: 128 KB           3h: Reserved
+#              4h-FFFh: Reserved    4h: 128 KB
+#                                   5h: 256 KB
+#                                   6h-FFFh: Reserved
+#
+#          So 001h is 32 KB under this scheme and 4 KB under the other. Nothing
+#          in the packet says which -- it is a configuration register set before
+#          the channel was enabled. Section 4.1.3, p.50, does not state any of
+#          this; it says "For Flash Erase length field definition, refer to the
+#          Controller Attached Flash Sharing (4.2.4.1), and Target Attached
+#          Flash Sharing (4.2.4.2) section for detail" and leaves it there.
+#
+#          A decoder written from Table 5 and Figure 48 alone prints "1 byte" --
+#          and Table 5 and Figure 48 are exactly where the table's own
+#          cross-reference sends you. The Flash Erase row ends "Refer to Figure
+#          48 for the packet format", the same sentence Flash Read and Flash
+#          Write carry, and Figure 48 draws the Length field without defining
+#          it. Table 16 is thirty-three pages further on and nothing points at
+#          it from here.
+#
+#   00 10 00 00   Address, most significant byte first
+#          "The Address field specifies the beginning of the erase block"
+#          (p.78), and it "must be aligned to the block erase size".
+#
+#   62     CRC
+#
+# Flash Erase carries no data -- 02h is even, which is section 4.1.1's LSB rule
+# on p.46, and "Flash Erase is a non-posted request with no data" (p.78) says
+# the same thing in words.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4).
+CMD 0A 02 30 01 00 10 00 00 62
+TAR
+RSP 08 0F 01 95
+
+# --- 2. PUT_FLASH_NP carrying a Flash Write ---
+#
+#   0A     PUT_FLASH_NP
+#   01     Cycle Type: Flash Write             Table 5, p.48
+#          Also Memory Write 32 on the peripheral channel. Odd, so it carries
+#          data, and Table 16's Length column for 01h is "<= Max Payload Size".
+#   40     Tag 4, Length[11:8] = 0h
+#   02     Length[7:0] = 02h -> 2 bytes
+#   00 20 00 00   Address
+#   5A A5  Data                                Figure 48, p.75
+#   1D     CRC
+CMD 0A 01 40 02 00 20 00 00 5A A5 1D
+TAR
+RSP 08 0F 01 95
+
+# --- 3. GET_FLASH_C: the target returns the erase completion ---
+#
+# "Used in Target Attached Flash Sharing mode for the target to return a flash
+# access completion to the controller. Note: It is illegal to issue a
+# GET_FLASH_C unless the target has indicated that it has a Flash Access
+# completion available to send" (Table 2, p.27). That indication is
+# FLASH_C_AVAIL, status bit 12.
+#
+#   0B     GET_FLASH_C
+#   31     CRC
+#
+#   08     ACCEPT
+#   06     Cycle Type: Successful Completion Without Data   Table 5, p.48
+#
+#          Even, so no data, and the flash row is Up/Down where the peripheral
+#          row of the same name is Up only. Those two rows are eight lines apart
+#          on two different pages and are otherwise identical.
+#
+#   30     Tag 3, Length[11:8] = 0h            matches the erase above
+#   00     Length[7:0] = 00h
+#
+#          Zero because it has to be, not because there is nothing to count:
+#          "For Completion without Data or Un-Successful Completion, the length
+#          field must be driven to zeros by initiator. The receiver must ignore
+#          the length field" (section 4.1.3, p.50). This is three sentences from
+#          the 4 KB rule and says the opposite.
+#
+#   0F 01  Status
+#   69     CRC
+CMD 0B 31
+TAR
+RSP 08 06 30 00 0F 01 69
+
+# --- 4. An erase length that is Reserved under both schemes ---
+#
+# 007h is above every defined encoding in either column of Table 16, so there is
+# no size to report and the packet is malformed however the link is configured.
+# Worth a case of its own because the failure is silent: the field is a legal
+# 12-bit number and the packet length does not depend on it.
+CMD 0A 02 70 07 00 30 00 00 1C
+TAR
+RSP 08 0F 01 95

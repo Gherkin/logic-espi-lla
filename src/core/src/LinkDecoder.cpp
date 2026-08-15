@@ -33,6 +33,13 @@ std::string Plural( unsigned count, const char* noun )
     return buf;
 }
 
+std::string BitText( unsigned bit, unsigned value )
+{
+    char buf[ 32 ];
+    std::snprintf( buf, sizeof( buf ), "bit %u = %u", bit, value );
+    return buf;
+}
+
 // Reads bytes for one phase, accumulating the CRC and the sample span as it
 // goes. WAIT_STATE bytes are read through ReadUncovered so they stay out of
 // the CRC -- section 3.10, p.45.
@@ -179,6 +186,7 @@ struct PacketContext
     // Set by the CycleHeader element for the Payload element that follows it.
     unsigned payload_bytes = 0;
     bool have_cycle_header = false;
+    CyclePayload payload_kind = CyclePayload::Opaque;
 
     // Whether the command phase carried a Posted cycle type. Read in the
     // response phase, because section 3.9, p.42, makes one response code
@@ -210,6 +218,29 @@ void AddChannelSupportChildren( Field* parent, uint32_t value )
     const uint32_t platform = value & ChannelSupportPlatformMask();
     if( platform != 0 )
         parent->Add( Field( "Platform specific channels", Hex( platform, 2 ), platform, 8, parent->span ) );
+}
+
+// Offset 44h bits 15:8, p.105. A capability mask: every set bit is a size the
+// controller may erase with, so it is rendered a bit at a time rather than as a
+// number. The neighbouring Flash Block Erase Size field at 40h is an encoded
+// value with almost the same name, and reading either as the other is the
+// mistake this per-bit rendering makes visible.
+void AddTargetEraseBlockChildren( Field* parent, uint32_t value )
+{
+    for( size_t i = 0; i < TargetEraseBlockCount(); ++i )
+    {
+        const TargetEraseBlockBit& b = TargetEraseBlockAt( i );
+        if( ( value >> b.bit ) & 1u )
+            parent->Add( Field( b.name, BitText( b.bit, 1 ) + "  supported", 1, 1, parent->span ) );
+    }
+
+    const uint32_t reserved = value & TargetEraseBlockReservedMask();
+    if( reserved != 0 )
+    {
+        Field f( "Reserved", Hex( reserved, 2 ) + "  field bits 0, 1, 3 and 4 must be driven to 0", reserved, 8, parent->span );
+        f.severity = Severity::Warning;
+        parent->Add( std::move( f ) );
+    }
 }
 
 // Describe a configuration address: the register it names, or why it does not
@@ -306,6 +337,8 @@ void AddConfigChildren( Field* data, uint16_t address, uint32_t value )
         Field field( f.name, text, f.value, static_cast<uint8_t>( f.high - f.low + 1 ), data->span );
         if( IsChannelSupportedField( address, f ) )
             AddChannelSupportChildren( &field, f.value );
+        else if( IsTargetEraseBlockField( address, f ) )
+            AddTargetEraseBlockChildren( &field, f.value );
         data->Add( std::move( field ) );
     }
 }
@@ -353,13 +386,6 @@ std::string LevelText( unsigned level, VwirePolarity polarity )
         break;
     }
     return state;
-}
-
-std::string BitText( unsigned bit, unsigned value )
-{
-    char buf[ 32 ];
-    std::snprintf( buf, sizeof( buf ), "bit %u = %u", bit, value );
-    return buf;
 }
 
 // Interrupt event, Table 8 p.60: bit 7 is the level, bits 6:0 the IRQ line,
@@ -599,6 +625,31 @@ Field LengthField( uint16_t raw, CycleLength meaning, unsigned* payload_bytes, B
             f.severity = Severity::Warning;
         *payload_bytes = 0;
         break;
+    case CycleLength::BlockErase:
+    {
+        // Table 16, p.81. Not a byte count: an erase block size encoding whose
+        // meaning depends on the flash sharing scheme, and the scheme is set in
+        // configuration register 040h bit 11 rather than carried in the packet.
+        //
+        // Reporting one size would be right half the time and silent about it,
+        // so both readings are named. 1h is the sharp case: 32 KB under one
+        // scheme and 4 KB under the other.
+        const FlashEraseSize size = LookupFlashEraseSize( raw );
+        f.text += "  erase block size";
+        if( size.target_attached == nullptr && size.controller_attached == nullptr )
+        {
+            f.text += ", Reserved under both flash sharing schemes";
+            f.severity = Severity::Warning;
+        }
+        else
+        {
+            f.text += std::string( ", target attached " )
+                      + ( size.target_attached != nullptr ? size.target_attached : "Reserved" ) + ", controller attached "
+                      + ( size.controller_attached != nullptr ? size.controller_attached : "Reserved" );
+        }
+        *payload_bytes = 0;
+        break;
+    }
     }
     return f;
 }
@@ -724,6 +775,7 @@ bool ReadCycleHeader( PhaseReader* reader, Field* parent, PacketContext* ctx )
 {
     ctx->have_cycle_header = false;
     ctx->payload_bytes = 0;
+    ctx->payload_kind = CyclePayload::Opaque;
 
     uint8_t cycle_type = 0;
     ByteSpan type_span{};
@@ -783,6 +835,7 @@ bool ReadCycleHeader( PhaseReader* reader, Field* parent, PacketContext* ctx )
     unsigned payload = 0;
     parent->Add( LengthField( CycleLengthOf( byte1, byte2 ), layout.length, &payload, Merge( tag_span, len_span ) ) );
     ctx->payload_bytes = layout.has_payload ? payload : 0;
+    ctx->payload_kind = layout.payload;
 
     if( layout.address_bytes != 0 )
     {
@@ -838,6 +891,179 @@ bool ReadCycleHeader( PhaseReader* reader, Field* parent, PacketContext* ctx )
     return true;
 }
 
+// Read `count` bytes into a buffer, merging their spans.
+bool ReadBytes( PhaseReader* reader, unsigned count, std::vector<uint8_t>* bytes, ByteSpan* span )
+{
+    bytes->reserve( bytes->size() + count );
+    for( unsigned i = 0; i < count; ++i )
+    {
+        uint8_t byte = 0;
+        ByteSpan one{};
+        if( !reader->Read( &byte, &one ) )
+            return false;
+        bytes->push_back( byte );
+        *span = ( i == 0 ) ? one : Merge( *span, one );
+    }
+    return true;
+}
+
+// The five MCTP header bytes of Figure 46, p.74. Named but not interpreted:
+// this document labels the cells and never says what any value means, so a
+// decode that explained a Message Tag would be explaining DSP0237, which is
+// not in front of us.
+void AddMctpHeader( Field* parent, const uint8_t bytes[ 5 ], ByteSpan span )
+{
+    MctpHeaderField fields[ 16 ];
+    const size_t count = DecodeMctpHeader( bytes, fields, 16 );
+
+    for( size_t i = 0; i < count && i < 16; ++i )
+    {
+        const MctpHeaderField& f = fields[ i ];
+        const bool single = ( f.high == f.low );
+        std::string text = single ? BitText( f.low, f.value ) : Hex( f.value, 2 );
+        parent->Add( Field( f.name, text, f.value, static_cast<uint8_t>( f.high - f.low + 1 ), span ) );
+    }
+
+    // Figure 46 draws bit 0 of the Source Target Address byte as a literal 1,
+    // in its own cell against the bit ruler, the same way Figure 45 draws the
+    // destination byte's bit 0 as a literal 0.
+    const uint8_t bit0 = MctpSourceBit0( bytes[ 0 ] );
+    if( bit0 != MctpSourceBit0Expected() )
+    {
+        Field f( "Source Address bit 0", BitText( 0, bit0 ) + "  Figure 46 draws this bit as "
+                                             + std::to_string( MctpSourceBit0Expected() ),
+                 bit0, 1, span );
+        f.severity = Severity::Warning;
+        parent->Add( std::move( f ) );
+    }
+}
+
+// The OOB packet's data region, read as the tunneled SMBus block write of
+// Figure 45, p.73.
+//
+// The whole SMBus packet is data as far as eSPI is concerned -- the eSPI header
+// is three bytes and stops. What makes this worth decoding rather than dumping
+// is that the packet states its own length twice, in the OOB Length field and
+// in the SMBus Byte Count, and the difference between them is the only thing
+// that says whether the last byte is a PEC.
+bool ReadSmbusPayload( PhaseReader* reader, Field* parent, const PacketContext& ctx )
+{
+    std::vector<uint8_t> header;
+    ByteSpan header_span{};
+    if( !ReadBytes( reader, SmbusHeaderBytes(), &header, &header_span ) )
+        return false;
+
+    const SmbusPacketInfo smbus = DecodeSmbusPacket( ctx.payload_bytes, header[ 0 ], header[ 1 ], header[ 2 ] );
+
+    Field packet( "SMBus Packet", Plural( ctx.payload_bytes, "byte" ), 0, 8, header_span );
+
+    Field address( "Target Address", Hex( header[ 0 ], 2 ) + "  address " + Hex( smbus.address, 2 ), smbus.address,
+                   static_cast<uint8_t>( SmbusAddressBits() ), header_span );
+    if( smbus.address_bit0 != SmbusAddressBit0Expected() )
+    {
+        address.text += ", but bit 0 is " + std::to_string( smbus.address_bit0 ) + " and Figure 45 draws it as "
+                        + std::to_string( SmbusAddressBit0Expected() );
+        address.severity = Severity::Warning;
+    }
+    packet.Add( std::move( address ) );
+
+    SmbusCommandInfo command;
+    const bool named_command = LookupSmbusCommand( smbus.command, &command );
+    packet.Add( Field( "Command Opcode",
+                       Hex( smbus.command, 2 )
+                           + ( named_command ? std::string( "  " ) + command.name
+                                             : std::string( "  not a command opcode this specification names" ) ),
+                       smbus.command, 8, header_span ) );
+
+    packet.Add( Field( "Byte Count", Hex( smbus.byte_count, 2 ) + "  " + Plural( smbus.byte_count, "byte" )
+                                         + ", excluding the 3 SMBus header bytes and the PEC",
+                       smbus.byte_count, 8, header_span ) );
+
+    if( !smbus.consistent )
+    {
+        // Length says one thing and Byte Count says another. The packet still
+        // decodes -- the OOB Length alone decides how many bytes to read -- so
+        // nothing else on the bus would notice this.
+        packet.Add( ErrorField( "SMBus Byte Count",
+                                "Length " + std::to_string( ctx.payload_bytes ) + " leaves "
+                                    + std::to_string( smbus.pec_bytes ) + " bytes after the 3 header bytes and "
+                                    + std::to_string( smbus.byte_count )
+                                    + " counted bytes, and the only byte allowed there is an optional PEC" ) );
+        // Fall back to reading the rest as opaque bytes: the count cannot be
+        // trusted to say where the data ends.
+        std::vector<uint8_t> rest;
+        ByteSpan rest_span{};
+        const unsigned remaining = ctx.payload_bytes - SmbusHeaderBytes();
+        if( remaining != 0 )
+        {
+            if( !ReadBytes( reader, remaining, &rest, &rest_span ) )
+            {
+                parent->Add( std::move( packet ) );
+                return false;
+            }
+            packet.Add( Field( "Data", Plural( remaining, "byte" ) + "  " + HexBytes( rest, 16 ), 0, 8, rest_span ) );
+        }
+        parent->Add( std::move( packet ) );
+        return true;
+    }
+
+    unsigned data_bytes = smbus.byte_count;
+
+    if( named_command && command.header_bytes != 0 && data_bytes >= command.header_bytes )
+    {
+        std::vector<uint8_t> mctp;
+        ByteSpan mctp_span{};
+        if( !ReadBytes( reader, command.header_bytes, &mctp, &mctp_span ) )
+        {
+            parent->Add( std::move( packet ) );
+            return false;
+        }
+        Field header_field( std::string( command.name ) + " Header", Plural( command.header_bytes, "byte" ), 0, 8, mctp_span );
+        AddMctpHeader( &header_field, mctp.data(), mctp_span );
+        packet.Add( std::move( header_field ) );
+        data_bytes -= command.header_bytes;
+    }
+    else if( named_command && command.header_bytes != 0 )
+    {
+        // The Byte Count comprehends the embedded protocol's header, so a count
+        // shorter than that header cannot be an MCTP packet however it is
+        // labelled. Figure 46's worked example is Byte Count = 5 + 64.
+        Field f( std::string( command.name ) + " Header",
+                 "Byte Count is " + std::to_string( smbus.byte_count ) + " and the header alone is "
+                     + std::to_string( command.header_bytes ) + " bytes",
+                 0, 8, header_span );
+        f.severity = Severity::Warning;
+        packet.Add( std::move( f ) );
+    }
+
+    if( data_bytes != 0 )
+    {
+        std::vector<uint8_t> data;
+        ByteSpan data_span{};
+        if( !ReadBytes( reader, data_bytes, &data, &data_span ) )
+        {
+            parent->Add( std::move( packet ) );
+            return false;
+        }
+        packet.Add( Field( "Data", Plural( data_bytes, "byte" ) + "  " + HexBytes( data, 16 ), 0, 8, data_span ) );
+    }
+
+    if( smbus.pec_bytes == 1 )
+    {
+        uint8_t pec = 0;
+        ByteSpan pec_span{};
+        if( !reader->Read( &pec, &pec_span ) )
+        {
+            parent->Add( std::move( packet ) );
+            return false;
+        }
+        packet.Add( Field( "PEC", Hex( pec, 2 ), pec, 8, pec_span ) );
+    }
+
+    parent->Add( std::move( packet ) );
+    return true;
+}
+
 // The data bytes a cycle header's Length counted. Emits nothing when there are
 // none: "Payload 0 bytes" on every memory read request is noise, and the cycle
 // type name already says whether the packet carries data.
@@ -846,20 +1072,38 @@ bool ReadPayload( PhaseReader* reader, Field* parent, const PacketContext& ctx )
     if( !ctx.have_cycle_header || ctx.payload_bytes == 0 )
         return true;
 
-    std::vector<uint8_t> bytes;
-    bytes.reserve( ctx.payload_bytes );
-    ByteSpan span{};
-    for( unsigned i = 0; i < ctx.payload_bytes; ++i )
+    if( ctx.payload_kind == CyclePayload::SmbusPacket )
     {
-        uint8_t byte = 0;
-        ByteSpan one{};
-        if( !reader->Read( &byte, &one ) )
-            return false;
-        bytes.push_back( byte );
-        span = ( i == 0 ) ? one : Merge( span, one );
+        if( ctx.payload_bytes >= SmbusHeaderBytes() )
+            return ReadSmbusPayload( reader, parent, ctx );
+
+        // "The Length field of the OOB message comprehends the count by the
+        // SMBus Byte Count field, in addition to the 3 header bytes" (p.73), so
+        // there is no OOB message shorter than those three bytes. Read what is
+        // there rather than walking off the end of the packet.
+        Field f( "SMBus Packet",
+                 "Length " + std::to_string( ctx.payload_bytes ) + " is shorter than the 3 SMBus header bytes", 0, 8,
+                 ByteSpan{} );
+        f.severity = Severity::Error;
+        parent->Add( std::move( f ) );
     }
 
-    parent->Add( Field( "Data", Plural( ctx.payload_bytes, "byte" ) + "  " + HexBytes( bytes, 16 ), 0, 8, span ) );
+    std::vector<uint8_t> bytes;
+    ByteSpan span{};
+    if( !ReadBytes( reader, ctx.payload_bytes, &bytes, &span ) )
+        return false;
+
+    Field data( "Data", Plural( ctx.payload_bytes, "byte" ) + "  " + HexBytes( bytes, 16 ), 0, 8, span );
+
+    // Figure 50, p.76, names data byte 0 of an RPMC OP1 request "RPMC Opcode:
+    // OP1". The value it should hold is in configuration register 040h bits
+    // 31:24 for the first flash device and in 048h/04Ch for the rest, so the
+    // decoder names the byte and leaves the comparison to a reader who has the
+    // configuration in front of them.
+    if( ctx.payload_kind == CyclePayload::RpmcOpcode )
+        data.Add( Field( "RPMC Opcode", Hex( bytes[ 0 ], 2 ) + "  OP1", bytes[ 0 ], 8, span ) );
+
+    parent->Add( std::move( data ) );
     return true;
 }
 
@@ -1156,23 +1400,31 @@ bool LinkDecoder::Decode( Transaction* out )
         response_elements.items[ response_elements.count++ ] = element;
     }
 
-    if( modifier_applies && rinfo.modifier == 0x2 )
+    if( modifier_applies && rinfo.modifier != 0 )
     {
-        // A virtual wire packet is appended ahead of the status trailer.
+        // Table 3 note 1, p.30: the modifier says which packet is appended to
+        // the response phase ahead of the status trailer. A virtual wire packet
+        // is one element; the other two are a cycle-type header and its data.
+        //
+        // The channel has to be set from the modifier rather than from the
+        // opcode. GET_STATUS is channel independent, but Table 5 note 3 means a
+        // cycle type byte is meaningless without a channel -- an appended flash
+        // completion read against the peripheral table would name the wrong
+        // cycle type with complete confidence.
         ElementList appended;
-        appended.items[ appended.count++ ] = Element::VwirePacket;
+        if( rinfo.modifier == 0x2 )
+        {
+            appended.items[ appended.count++ ] = Element::VwirePacket;
+        }
+        else
+        {
+            config.channel = ( rinfo.modifier == 0x1 ) ? ChannelId::Peripheral : ChannelId::Flash;
+            appended.items[ appended.count++ ] = Element::CycleHeader;
+            appended.items[ appended.count++ ] = Element::Payload;
+        }
         for( uint8_t i = 0; i < response_elements.count && appended.count < ElementList::kMax; ++i )
             appended.items[ appended.count++ ] = response_elements.items[ i ];
         response_elements = appended;
-    }
-    else if( modifier_applies && rinfo.modifier != 0 )
-    {
-        response.Add( ErrorField( "Appended Packet",
-                                  std::string( "response modifier " ) + Hex( rinfo.modifier, 1 )
-                                      + " appends a completion, whose header layout is not transcribed yet" ) );
-        txn.fields.push_back( std::move( response ) );
-        *out = std::move( txn );
-        return true;
     }
 
     if( !ReadElements( &rsp, response_elements, &response, &config ) )

@@ -1,0 +1,62 @@
+Command
+  Opcode  0x0A  PUT_FLASH_NP
+  Cycle Type  0x23  RPMC Op.1
+    Command Type  Non-Posted
+    Direction  controller to target
+    RPMC Target  0x1  2nd RPMC flash device
+  Tag  0x5
+  Length  0x005  5 bytes
+  Data  5 bytes  9B 01 02 03 04
+    RPMC Opcode  0x9B  OP1
+  CRC  0x8A  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok
+---
+Command
+  Opcode  0x0A  PUT_FLASH_NP
+  Cycle Type  0x04  RPMC Op.2
+    Command Type  Non-Posted
+    Direction  controller to target
+    RPMC Target  0x0  1st RPMC flash device
+  Tag  0x6
+  Length  0x040  64 bytes
+  CRC  0x05  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok
+---
+Command
+  Opcode  0x0B  GET_FLASH_C
+  CRC  0x31  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Cycle Type  0x0F  Successful Completion With Data
+    Command Type  Completion
+    Direction  either direction
+    Split Completion  0x3  only completion for a split transaction
+  Tag  0x6
+  Length  0x002  2 bytes
+  Data  2 bytes  00 12
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x58  ok

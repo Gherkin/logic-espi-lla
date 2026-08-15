@@ -7,10 +7,17 @@
 #    opcodes and the channel-independent ones.
 CMD 0C 00
 
-# 2. A defined opcode whose packet shape has not been transcribed yet.
-#    PUT_OOB is real (Table 2, p.26) but its packet is Figure 45, which is
-#    stage E. The decoder must say so rather than guess a length.
-CMD 06 00
+# 2. A defined opcode whose packet shape has not been transcribed yet. RESET
+#    is real (Table 2, p.27, "In-band RESET command") and is the last opcode
+#    with no transcribed shape -- the description is one line and no figure in
+#    the document draws the transaction. The decoder must say so rather than
+#    guess a length.
+#
+#    This case used to be PUT_OOB, which was the same situation until Figure 45
+#    was read. Kept pointed at whatever is still a gap, because the path it
+#    exercises is "a real opcode we have not finished" and that has to stay
+#    distinguishable from "not an opcode at all", which is case 1.
+CMD FF 00
 
 # 3. A good GET_CONFIGURATION command with one bit flipped in the CRC byte.
 #    C9h where the capture has C8h.
@@ -61,3 +68,37 @@ CMD 00 21 00
 #    length lives nowhere else, so the packet length is genuinely unknown --
 #    42h is PUT_IORD_SHORT with a request length that does not exist.
 CMD 42 00 20 00
+
+# 10. The same channel-keyed lookup from the other side. 00h is Memory Read 32
+#     on the peripheral channel and Flash Read on the flash channel, and the
+#     OOB channel defines exactly one cycle type -- 21h. So an OOB packet
+#     carrying 00h names nothing, and a byte-keyed table would confidently
+#     report a memory read tunnelled inside an SMBus message.
+CMD 06 00 00
+
+# 11. An OOB message whose two length statements disagree. Section 4.2.3, p.73:
+#     "The presence of SMBus PEC is determined through a simple arithmetic
+#     operation between the eSPI OOB header length field and the SMBus Byte
+#     Count." Length 8 minus the 3 SMBus header bytes minus a Byte Count of 2
+#     leaves 3 bytes where the specification allows either nothing or one PEC
+#     byte.
+#
+#     This is the OOB channel's version of the whole problem: the packet is a
+#     perfectly well formed eSPI transaction. The OOB Length alone decides how
+#     many bytes to read, so the CRC lands where it should and every other
+#     field checks out. Only comparing the two counts finds it.
+#
+#     21     Cycle Type: OOB (Tunneled SMBus) Message
+#     00 08  Tag 0, Length 008h -> 8 bytes of data
+#     2C     SMBus Target Address 16h, bit 0 = 0
+#     0F     SMBus Command Opcode: MCTP
+#     02     SMBus Byte Count = 2      <- says 2, the Length leaves room for 5
+#     AA BB CC DD EE
+#
+#     The transaction is completed with an ordinary ACCEPT so that the only
+#     fault in it is the one being tested.
+#
+#     CRC bytes pasted from tools/crc_ref.py (rule R4).
+CMD 06 21 00 08 2C 0F 02 AA BB CC DD EE 73
+TAR
+RSP 08 0F 01 95

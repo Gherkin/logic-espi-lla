@@ -110,6 +110,24 @@ uint8_t ChannelSupportPlatformMask();
 // per-bit rendering rather than a single value.
 bool IsChannelSupportedField( uint16_t address, const ConfigField& field );
 
+// The Target Flash Erase Block Size bit field at offset 44h bits 15:8. A
+// capability mask, not an encoded value -- "If multiple bits are set then the
+// controller is allowed to issue an erase using any of the indicated sizes"
+// (p.105) -- and easy to confuse with the encoded Flash Block Erase Size field
+// at 40h bits 4:2, which it is not.
+struct TargetEraseBlockBit
+{
+    uint8_t bit; // numbered within the field, so bit 0 is register bit 8
+    const char* name;
+};
+size_t TargetEraseBlockCount();
+const TargetEraseBlockBit& TargetEraseBlockAt( size_t index );
+
+// Bits 0, 1, 3 and 4 of the field, which p.105 prints as Reserved.
+uint8_t TargetEraseBlockReservedMask();
+
+bool IsTargetEraseBlockField( uint16_t address, const ConfigField& field );
+
 } // namespace espi
 
 #endif // ESPI_CONFIG_REGISTERS_H

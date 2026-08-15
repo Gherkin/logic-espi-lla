@@ -1,0 +1,117 @@
+# The Channel 3 RPMC extension registers: 044h, 048h and 04Ch.
+#
+# HAND BUILT FROM THE SPECIFICATION. The capture only ever reads 0020h and
+# 0030h, and these three registers did not exist before revision 1.6 of the
+# specification anyway -- the revision history on p.8 lists "Fixed the table of
+# Target Registers to include registers at offset 44h, 48h and 4Ch" against
+# March 2025.
+#
+# Every field in all three is RO, and every one that carries information is
+# HwInit. They describe what flash hardware sits behind the target, so none of
+# them has a reset value the specification can state.
+#
+# --- 1. Offset 044h, Channel 3 Capabilities and Configurations 2 ---
+#
+#   21     GET_CONFIGURATION
+#   00 44  Address, most significant byte first
+#   F3     CRC
+#
+#   08     ACCEPT
+#   04 44 8C 00   Data, LEAST significant byte first (section 5.1, p.86)
+#                 so the DWord is 008C4404h
+#   0F 01  Status
+#   14     CRC
+#
+# 008C4404h field by field, pp.104-105:
+#
+#   31:24  0h    Reserved
+#   23:22  10b   Number of Target Attached Flash RPMC flash devices
+#                -> 3 RPMC flash devices
+#   21:16  0Ch   Target RPMC Supported -> 12 counters
+#
+#                The page calls this "a 1-based field" and then lists
+#                "0h: Target does not support Replay Protected Monotonic
+#                counter. 1h: ... up to 1 ... 2h: ... up to 2". So the value IS
+#                the count and 0h is genuinely none -- it is not a 0-based
+#                count needing a +1, which is what "1-based" means everywhere
+#                else in this map. The neighbouring RPMC Counter fields at 040h
+#                and 048h really are 0-based and say so.
+#
+#   15:8   44h   Target Flash Erase Block Size -> bits 2 and 6 set,
+#                so 4 Kbytes and 64 Kbytes
+#
+#                A CAPABILITY MASK, NOT AN ENCODED VALUE: "If multiple bits are
+#                set then the controller is allowed to issue an erase using any
+#                of the indicated sizes" (p.105). The bit positions are 2, 5, 6
+#                and 7 for 4 KB, 32 KB, 64 KB and 128 KB, with 0, 1, 3 and 4
+#                Reserved -- a gap in the middle that no encoded field would
+#                have. The similarly named Flash Block Erase Size at 040h bits
+#                4:2 IS an encoded value, and reading either as the other is the
+#                mistake this per-bit rendering makes visible.
+#
+#   7:3    0h    Reserved
+#   2:0    100b  Target Maximum Read Request Size Supported -> 512 bytes
+#
+#                ITS OWN ENCODING, not the Maximum Read Request Size table every
+#                other read request field in the map uses. There 000b is
+#                Reserved; here p.105 prints "000b, 001b: 64 bytes max read
+#                request size" and reserves nothing. Reusing the other table
+#                would print "Reserved" for a legal advertisement of 64 bytes.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4).
+CMD 21 00 44 F3
+TAR
+RSP 08 04 44 8C 00 0F 01 14
+
+# --- 2. The same register with a Reserved erase-block bit set ---
+#
+# Erase block size 45h has bit 0 set, which p.105 prints as Reserved. The
+# register still decodes and every other field is unchanged; only the reserved
+# bit is worth saying out loud.
+CMD 21 00 44 F3
+TAR
+RSP 08 04 45 8C 00 0F 01 76
+
+# --- 3. The same register with a Target Maximum Read Request Size of 000b ---
+#
+# The one encoding that tells the two read-request tables apart. Every other
+# read request field in the map uses the encoding on p.97, where 000b is
+# Reserved; p.105 prints "000b, 001b: 64 bytes max read request size" for this
+# field and reserves nothing. 100b decodes as 512 bytes under either table, so
+# the transaction above cannot distinguish them and this one has to exist.
+#
+#   Data 008C4400h -- the same register with bits 2:0 cleared.
+CMD 21 00 44 F3
+TAR
+RSP 08 00 44 8C 00 0F 01 B0
+
+# --- 4. Offset 048h, Channel 3 Capabilities and Configurations 3 ---
+#
+#   Data 9B300000h, on the wire least significant byte first.
+#
+#   31:24  9Bh   RPMC OP1 Opcode on the 2nd RPMC Flash device
+#   23:20  3h    RPMC Counter on the 2nd RPMC Flash device
+#                "Per RPMC SFDP specification, it's a 0-based number, e.g. 0
+#                indicates that 1 counter is supported" (p.106), so 3h is 4.
+#   19:0   0h    Reserved
+CMD 21 00 48 D7
+TAR
+RSP 08 00 00 30 9B 0F 01 C2
+
+# --- 5. Offset 04Ch, Channel 3 Capabilities and Configurations 4 ---
+#
+#   Data 9B109C00h, on the wire least significant byte first.
+#
+#   31:24  9Bh   RPMC OP1 Opcode on the 4th RPMC Flash device
+#   23:20  1h    RPMC Counter on the 4th RPMC Flash device -> 2 counters
+#   19:16  0h    Reserved
+#   15:8   9Ch   RPMC OP1 Opcode on the 3rd RPMC Flash device
+#   7:4    0h    RPMC Counter on the 3rd RPMC Flash device -> 1 counter
+#   3:0    0h    Reserved
+#
+# THE 4th DEVICE IS IN THE HIGH HALF AND THE 3rd IN THE LOW HALF. That is the
+# order p.106 prints the rows in, and it is not the order a reader expects after
+# 048h holds the 2nd device alone. Transcribed as printed.
+CMD 21 00 4C CB
+TAR
+RSP 08 00 9C 10 9B 0F 01 3F

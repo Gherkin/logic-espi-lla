@@ -1,0 +1,4 @@
+Command
+  Opcode  0xFF  RESET
+  Ignored  7 bytes  FF FF FF FF FF FF FF
+  Register Reset  008h-00Bh General Capabilities and Configurations at the chip select deassertion edge; every other register retains its value

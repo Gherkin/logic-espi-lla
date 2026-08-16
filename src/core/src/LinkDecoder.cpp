@@ -1128,6 +1128,92 @@ bool ReadShortData( PhaseReader* reader, Field* parent, const PacketContext& ctx
     return true;
 }
 
+// --- the In-band RESET command, section 8.3.2 pp.122-123 -------------------
+
+// Everything after the RESET opcode is ignored -- "Ignore all the subsequent
+// bits received" (p.122) -- and the transaction ends at the chip select
+// deassertion edge rather than at a length anything could compute, because
+// p.123 has the target "Wait until CS# deassertion". So the bytes are read to
+// the end of the frame and reported, never interpreted.
+//
+// Read through ReadUncovered because there is no CRC to accumulate them into:
+// "No CRC byte and thus CRC checking must be ignored."
+void ReadResetRemainder( PhaseReader* reader, Field* parent, IoMode mode )
+{
+    std::vector<uint8_t> bytes;
+    ByteSpan span{};
+    for( ;; )
+    {
+        uint8_t value = 0;
+        ByteSpan one{};
+        if( !reader->ReadUncovered( &value, &one ) )
+            break;
+        span = bytes.empty() ? one : Merge( span, one );
+        bytes.push_back( value );
+    }
+
+    const unsigned count = static_cast<unsigned>( bytes.size() );
+    Field ignored( "Ignored", Plural( count, "byte" ) + ( count != 0 ? "  " + HexBytes( bytes, 16 ) : std::string() ), 0, 8,
+                   span );
+
+    // Figure 65, p.123, draws the whole command phase: sixteen clocks with
+    // every I/O line high. The opcode is the first of those clocks, so it
+    // counts. Neither the clock total nor the all-ones content is a length the
+    // decoder reads to -- both are checked against what the frame actually
+    // held. A deviation is the controller's, and it is a warning rather than an
+    // error because the target ignores these bits either way and resets
+    // regardless; nothing else on the bus would flag it.
+    const unsigned clocks = ( count + 1 ) * static_cast<unsigned>( ClocksPerByte( mode ) );
+    bool all_high = true;
+    for( uint8_t value : bytes )
+    {
+        if( value != 0xFF )
+            all_high = false;
+    }
+
+    if( clocks != ResetCommandClocks() || !all_high )
+    {
+        std::string differs;
+        if( clocks != ResetCommandClocks() )
+            differs = "is " + std::to_string( clocks ) + " clocks";
+        if( !all_high )
+        {
+            if( !differs.empty() )
+                differs += " and ";
+            differs += "has ignored bytes that are not all FFh";
+        }
+
+        Field f( "Reset Pattern",
+                 "Figure 65 draws " + std::to_string( ResetCommandClocks() ) + " clocks with every I/O line high; this frame "
+                     + differs,
+                 0, 8, ByteSpan{} );
+        f.severity = Severity::Warning;
+        ignored.Add( std::move( f ) );
+    }
+
+    parent->Add( std::move( ignored ) );
+
+    // p.123: "Offset 008h-00Bh: General Capabilities and Configurations" is the
+    // only register an In-band RESET returns to its default, and it happens at
+    // the chip select deassertion edge rather than when the opcode is seen.
+    // Worth saying out loud because 008h is where I/O Mode Select and CRC
+    // Checking Enable live, so this is the bus going back to Single I/O with
+    // CRC checking off -- following that across transactions is phase 7's job.
+    //
+    // The register's name comes from Table 21 rather than being repeated here,
+    // so the tree states it once.
+    const char* name = nullptr;
+    LookupConfigRegister( ResetRegisterStart(), &name );
+
+    char offsets[ 32 ];
+    std::snprintf( offsets, sizeof( offsets ), "%03Xh-%03Xh", ResetRegisterStart(), ResetRegisterEnd() );
+
+    parent->Add( Field( "Register Reset",
+                        std::string( offsets ) + ( name != nullptr ? std::string( " " ) + name : std::string() )
+                            + " at the chip select deassertion edge; every other register retains its value",
+                        ResetRegisterStart(), 16, ByteSpan{} ) );
+}
+
 // Walk one phase's elements. Returns false if the source ran out mid-packet.
 bool ReadElements( PhaseReader* reader, const ElementList& list, Field* parent, PacketContext* config )
 {
@@ -1265,6 +1351,23 @@ bool LinkDecoder::Decode( Transaction* out )
                                  std::string( "no shape transcribed for " ) + info.name
                                      + " -- packet length unknown, decode stopped" ) );
         txn.fields.push_back( std::move( command ) );
+        *out = std::move( txn );
+        return true;
+    }
+
+    // Section 8.3.2, p.122: RESET carries no CRC byte and gets no response
+    // phase, so the transaction ends where the chip select does and there is
+    // nothing after this point to read. Every row the shape table marks
+    // NoCrcNoResponse takes this path; the header of
+    // src/core/tables/PacketShapes.h is where the reasoning lives.
+    //
+    // Running out of bytes is the normal end here, so `truncated` stays false.
+    if( shape.framing == PacketFraming::NoCrcNoResponse )
+    {
+        ReadResetRemainder( &cmd, &command, mSource->Mode() );
+        command.span = cmd.Span();
+        txn.fields.push_back( std::move( command ) );
+        txn.span = txn.fields.front().span;
         *out = std::move( txn );
         return true;
     }

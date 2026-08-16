@@ -182,64 +182,64 @@
     {
       "label": "shape: GET_CONFIGURATION response loses its data DWord",
       "file": "src/core/tables/PacketShapes.h",
-      "find": "X( GET_CONFIGURATION, ESPI_CMD( Addr16 ), ESPI_RSP( Data32, Status16 ) )",
-      "replace": "X( GET_CONFIGURATION, ESPI_CMD( Addr16 ), ESPI_RSP( Status16 ) )",
+      "find": "X( GET_CONFIGURATION, ESPI_CMD( Addr16 ), ESPI_RSP( Data32, Status16 ), Framed )",
+      "replace": "X( GET_CONFIGURATION, ESPI_CMD( Addr16 ), ESPI_RSP( Status16 ), Framed )",
       "tests": "test_link"
     },
     {
       "label": "shape: SET_CONFIGURATION data moved to the response phase",
       "file": "src/core/tables/PacketShapes.h",
-      "find": "X( SET_CONFIGURATION, ESPI_CMD( Addr16, Data32 ), ESPI_RSP( Status16 ) )",
-      "replace": "X( SET_CONFIGURATION, ESPI_CMD( Addr16 ), ESPI_RSP( Data32, Status16 ) )",
+      "find": "X( SET_CONFIGURATION, ESPI_CMD( Addr16, Data32 ), ESPI_RSP( Status16 ), Framed )",
+      "replace": "X( SET_CONFIGURATION, ESPI_CMD( Addr16 ), ESPI_RSP( Data32, Status16 ), Framed )",
       "tests": "test_link"
     },
     {
       "label": "shape: GET_VWIRE response loses its virtual wire packet",
       "file": "src/core/tables/PacketShapes.h",
-      "find": "X( GET_VWIRE, ESPI_CMD(), ESPI_RSP( VwirePacket, Status16 ) )",
-      "replace": "X( GET_VWIRE, ESPI_CMD(), ESPI_RSP( Status16 ) )",
+      "find": "X( GET_VWIRE, ESPI_CMD(), ESPI_RSP( VwirePacket, Status16 ), Framed )",
+      "replace": "X( GET_VWIRE, ESPI_CMD(), ESPI_RSP( Status16 ), Framed )",
       "tests": "test_link"
     },
     {
       "label": "shape: GET_STATUS given a spurious address field",
       "file": "src/core/tables/PacketShapes.h",
-      "find": "X( GET_STATUS, ESPI_CMD(), ESPI_RSP( Status16 ) )",
-      "replace": "X( GET_STATUS, ESPI_CMD( Addr16 ), ESPI_RSP( Status16 ) )",
+      "find": "X( GET_STATUS, ESPI_CMD(), ESPI_RSP( Status16 ), Framed )",
+      "replace": "X( GET_STATUS, ESPI_CMD( Addr16 ), ESPI_RSP( Status16 ), Framed )",
       "tests": "test_link"
     },
     {
       "label": "shape: PUT_PC payload moved to the response phase",
       "file": "src/core/tables/PacketShapes.h",
-      "find": "X( PUT_PC, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )",
-      "replace": "X( PUT_PC, ESPI_CMD( CycleHeader ), ESPI_RSP( Payload, Status16 ) )",
+      "find": "X( PUT_PC, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ), Framed )",
+      "replace": "X( PUT_PC, ESPI_CMD( CycleHeader ), ESPI_RSP( Payload, Status16 ), Framed )",
       "tests": "test_link"
     },
     {
       "label": "shape: GET_PC response loses its completion header",
       "file": "src/core/tables/PacketShapes.h",
-      "find": "X( GET_PC, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )",
-      "replace": "X( GET_PC, ESPI_CMD(), ESPI_RSP( Status16 ) )",
+      "find": "X( GET_PC, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ), Framed )",
+      "replace": "X( GET_PC, ESPI_CMD(), ESPI_RSP( Status16 ), Framed )",
       "tests": "test_link"
     },
     {
       "label": "shape: PUT_NP answered with no completion at all",
       "file": "src/core/tables/PacketShapes.h",
-      "find": "X( PUT_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( CycleHeader, Payload, Status16 ) )",
-      "replace": "X( PUT_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )",
+      "find": "X( PUT_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( CycleHeader, Payload, Status16 ), Framed )",
+      "replace": "X( PUT_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ), Framed )",
       "tests": "test_link"
     },
     {
       "label": "shape: short read data moved to the command phase",
       "file": "src/core/tables/PacketShapes.h",
-      "find": "X( PUT_IORD_SHORT, ESPI_CMD( IoAddr16 ), ESPI_RSP( ShortData, Status16 ) )",
-      "replace": "X( PUT_IORD_SHORT, ESPI_CMD( IoAddr16, ShortData ), ESPI_RSP( Status16 ) )",
+      "find": "X( PUT_IORD_SHORT, ESPI_CMD( IoAddr16 ), ESPI_RSP( ShortData, Status16 ), Framed )",
+      "replace": "X( PUT_IORD_SHORT, ESPI_CMD( IoAddr16, ShortData ), ESPI_RSP( Status16 ), Framed )",
       "tests": "test_link"
     },
     {
       "label": "shape: short write data moved to the response phase",
       "file": "src/core/tables/PacketShapes.h",
-      "find": "X( PUT_MEMWR32_SHORT, ESPI_CMD( MemAddr32, ShortData ), ESPI_RSP( Status16 ) )",
-      "replace": "X( PUT_MEMWR32_SHORT, ESPI_CMD( MemAddr32 ), ESPI_RSP( ShortData, Status16 ) )",
+      "find": "X( PUT_MEMWR32_SHORT, ESPI_CMD( MemAddr32, ShortData ), ESPI_RSP( Status16 ), Framed )",
+      "replace": "X( PUT_MEMWR32_SHORT, ESPI_CMD( MemAddr32 ), ESPI_RSP( ShortData, Status16 ), Framed )",
       "tests": "test_link"
     },
     {
@@ -847,43 +847,71 @@
     {
       "label": "shape: PUT_OOB payload moved to the response phase",
       "file": "src/core/tables/PacketShapes.h",
-      "find": "X( PUT_OOB, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )",
-      "replace": "X( PUT_OOB, ESPI_CMD( CycleHeader ), ESPI_RSP( Payload, Status16 ) )",
+      "find": "X( PUT_OOB, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ), Framed )",
+      "replace": "X( PUT_OOB, ESPI_CMD( CycleHeader ), ESPI_RSP( Payload, Status16 ), Framed )",
       "tests": "test_link"
     },
     {
       "label": "shape: GET_OOB response loses its packet",
       "file": "src/core/tables/PacketShapes.h",
-      "find": "X( GET_OOB, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )",
-      "replace": "X( GET_OOB, ESPI_CMD(), ESPI_RSP( Status16 ) )",
+      "find": "X( GET_OOB, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ), Framed )",
+      "replace": "X( GET_OOB, ESPI_CMD(), ESPI_RSP( Status16 ), Framed )",
       "tests": "test_link"
     },
     {
       "label": "shape: PUT_FLASH_C given GET_FLASH_NP's shape",
       "file": "src/core/tables/PacketShapes.h",
-      "find": "X( PUT_FLASH_C, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )",
-      "replace": "X( PUT_FLASH_C, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )",
+      "find": "X( PUT_FLASH_C, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ), Framed )",
+      "replace": "X( PUT_FLASH_C, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ), Framed )",
       "tests": "test_link"
     },
     {
       "label": "shape: GET_FLASH_NP request read from the command phase",
       "file": "src/core/tables/PacketShapes.h",
-      "find": "X( GET_FLASH_NP, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )",
-      "replace": "X( GET_FLASH_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )",
+      "find": "X( GET_FLASH_NP, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ), Framed )",
+      "replace": "X( GET_FLASH_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ), Framed )",
       "tests": "test_link"
     },
     {
       "label": "shape: PUT_FLASH_NP answered with a completion, as PUT_NP is",
       "file": "src/core/tables/PacketShapes.h",
-      "find": "X( PUT_FLASH_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )",
-      "replace": "X( PUT_FLASH_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( CycleHeader, Payload, Status16 ) )",
+      "find": "X( PUT_FLASH_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ), Framed )",
+      "replace": "X( PUT_FLASH_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( CycleHeader, Payload, Status16 ), Framed )",
       "tests": "test_link"
     },
     {
       "label": "shape: GET_FLASH_C response loses its completion",
       "file": "src/core/tables/PacketShapes.h",
-      "find": "X( GET_FLASH_C, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )",
-      "replace": "X( GET_FLASH_C, ESPI_CMD(), ESPI_RSP( Status16 ) )",
+      "find": "X( GET_FLASH_C, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ), Framed )",
+      "replace": "X( GET_FLASH_C, ESPI_CMD(), ESPI_RSP( Status16 ), Framed )",
+      "tests": "test_link"
+    },
+    {
+      "label": "shape: RESET framed like every other opcode",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "X( RESET, ESPI_CMD(), ESPI_RSP(), NoCrcNoResponse )",
+      "replace": "X( RESET, ESPI_CMD(), ESPI_RSP(), Framed )",
+      "tests": "test_link"
+    },
+    {
+      "label": "reset: Figure 65's 16 clocks halved to 8",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "#define ESPI_RESET_CLOCKS 16u",
+      "replace": "#define ESPI_RESET_CLOCKS 8u",
+      "tests": "test_link"
+    },
+    {
+      "label": "reset: In-band RESET points at 010h rather than 008h",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "#define ESPI_RESET_REGISTER_START 0x008u",
+      "replace": "#define ESPI_RESET_REGISTER_START 0x010u",
+      "tests": "test_link"
+    },
+    {
+      "label": "reset: In-band RESET's register range runs to 00Fh",
+      "file": "src/core/tables/PacketShapes.h",
+      "find": "#define ESPI_RESET_REGISTER_END 0x00Bu",
+      "replace": "#define ESPI_RESET_REGISTER_END 0x00Fu",
       "tests": "test_link"
     },
     {

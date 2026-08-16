@@ -7,25 +7,26 @@
 #    opcodes and the channel-independent ones.
 CMD 0C 00
 
-# 2. A defined opcode whose packet shape has not been transcribed yet. RESET
-#    is real (Table 2, p.27, "In-band RESET command") and is the last opcode
-#    with no transcribed shape. The decoder must say so rather than guess a
-#    length.
+# 2. A RESET whose ignored bits are not driven high. Section 8.3.2, p.122:
+#    "All I/O lines are driven to high ('1') for 16 eSPI clocks". Figure 65 on
+#    p.123 draws all four of them. This frame is the right length -- two bytes
+#    is sixteen clocks in Single I/O -- and the byte after the opcode is 00h.
 #
-#    THE SPECIFICATION IS NOT SILENT ON IT, WHICH THIS COMMENT USED TO CLAIM.
-#    Section 8.3.2 on p.122 gives the whole transaction -- no CRC byte, no
-#    response phase, all I/O lines high for 16 eSPI clocks, tri-stated at the
-#    CS# deassertion edge -- and Figure 65 on p.123 draws it. Nothing in
-#    Table 2 points there, which is how it went unread. So this is a gap in
-#    our transcription and not in the document, and it stays a gap only until
-#    somebody transcribes it: see docs/HANDOFF.md, next item 1.
+#    The target ignores it either way and resets at the CS# deassertion edge
+#    regardless, so this transaction WORKS and is still a controller violating
+#    8.3.2. Same shape of fault as case 5: nothing else on the bus would notice.
 #
-#    This case used to be PUT_OOB, which was the same situation until Figure 45
-#    was read. Kept pointed at whatever is still a gap, because the path it
-#    exercises is "a real opcode we have not finished" and that has to stay
-#    distinguishable from "not an opcode at all", which is case 1. RESET is the
-#    last opcode in that category, so transcribing it leaves this case with no
-#    subject and something else has to take its place.
+#    THIS SLOT USED TO HOLD "a real opcode whose packet shape has not been
+#    transcribed yet", and it held the same two bytes, because RESET was the
+#    last opcode in that category. Transcribing section 8.3.2 emptied the
+#    category: every opcode in Table 2 now has a shape, and test_link.cpp
+#    asserts that by construction rather than by example.
+#
+#    The distinction that case was guarding -- "a real byte the decoder must
+#    stop on" against "not a defined encoding at all", which is case 1 -- did
+#    not go away with it. Cases 8, 9 and 10 carry it now: a cycle type that is
+#    real on another channel, a Reserved request length, and the same
+#    channel-keyed lookup from the other side.
 CMD FF 00
 
 # 3. A good GET_CONFIGURATION command with one bit flipped in the CRC byte.

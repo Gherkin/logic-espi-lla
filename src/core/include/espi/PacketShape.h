@@ -60,11 +60,44 @@ struct ElementList
     uint8_t count = 0;
 };
 
+// How a transaction is framed around the elements the table lists.
+//
+// This was an invariant until RESET was transcribed: every command phase ended
+// in a CRC, every response phase existed and ended in one. Section 8.3.2, p.122,
+// says RESET has neither, so the framing is now a property of the row.
+enum class PacketFraming : uint8_t
+{
+    // opcode, the command elements, CRC -- TAR -- response byte, the response
+    // elements, CRC. Every opcode in Table 2 but RESET.
+    Framed,
+
+    // opcode, then bits the target ignores, then the chip select deassertion
+    // edge. No CRC byte, no turn-around and no response phase at all.
+    NoCrcNoResponse,
+};
+
 struct PacketShape
 {
     ElementList command;  // between the opcode and the command CRC
     ElementList response; // between the response byte and the response CRC
+    PacketFraming framing = PacketFraming::Framed;
 };
+
+// --- the In-band RESET command, section 8.3.2 pp.122-123 -------------------
+//
+// These are the only three numbers the RESET transaction carries, and none of
+// them is a packet length -- see the header of src/core/tables/PacketShapes.h
+// for why the decode reads to the chip select edge instead.
+
+// Serial clocks the controller drives every I/O line high for, Figure 65 p.123.
+// CLOCKS, NOT BYTES: two bytes in Single I/O, four in Dual, eight in Quad,
+// which is what lets the target recognise the command whatever mode it is in.
+unsigned ResetCommandClocks();
+
+// The one configuration register an In-band RESET returns to its default,
+// p.123, as an inclusive offset range. Every other register keeps its value.
+uint16_t ResetRegisterStart();
+uint16_t ResetRegisterEnd();
 
 // Look up the shape for an opcode. Returns false when the shape has not been
 // transcribed from the specification -- the decoder reports that as an

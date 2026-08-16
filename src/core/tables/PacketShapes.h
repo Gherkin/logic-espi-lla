@@ -13,13 +13,18 @@
 //           Figure 23: "SET_CONFIGURATION Command", p.37
 //           Figure 41: "Virtual Wire Packet Format", p.58
 //           Section 3.7, p.37, states the config shapes in prose as well
+//           Section 8.3.2: "In-band RESET Command", pp.122-123
+//           Figure 65: "In-band RESET Command", p.123
 //
-//  THE FRAMING IS IMPLICIT. Every command phase begins with the opcode and
-//  ends with a CRC; every response phase begins with the response byte and
-//  ends with a CRC. Only the middle varies, so only the middle is tabulated.
-//  That invariant is asserted once in tests/test_link.cpp rather than repeated
-//  on every row -- a row here is meant to be checkable against one figure in
-//  seconds.
+//  THE FRAMING IS A COLUMN, NOT AN INVARIANT. Eighteen of the nineteen rows
+//  are `Framed`: the command phase begins with the opcode and ends with a CRC,
+//  the response phase begins with the response byte and ends with a CRC, and
+//  only the middle varies, so only the middle is tabulated. RESET is the
+//  exception and section 8.3.2 is where it says so.
+//
+//  This used to be written down as an invariant, asserted once in
+//  tests/test_link.cpp and left off every row. It was wrong for the whole time
+//  RESET sat in the opcode table with no shape beside it.
 //
 //  BYTE ORDER TRAVELS WITH THE ELEMENT, because eSPI mixes it within a single
 //  packet and getting it wrong is silent. Section 5.1, p.86:
@@ -157,35 +162,124 @@
 //  37", which is the short *read* format; the short write is Figure 35. Every
 //  figure number in this repository is the number printed on the page the
 //  figure is on, not the number some other table points at.
+//
+//  --- RESET: THE IN-BAND RESET COMMAND, SECTION 8.3.2 pp.122-123 -----------
+//
+//  Table 2, p.27, gives RESET one line -- "In-band RESET command" -- under
+//  Channel Independent, and points nowhere. Section 8.3.2 on p.122 defines the
+//  whole transaction and Figure 65 on p.123 draws it, and nothing between the
+//  two cross-references either. That is why this row was the last one missing,
+//  and it is the failure this repository keeps warning about: a fact no test
+//  and no mutation can see, because nobody had read the page.
+//
+//  Section 8.3.2 p.122, in its own words:
+//
+//    "RESET command opcode is FFh (i.e. all 1's)."
+//    "It is sent with the 20MHz speed or lower."
+//    "No CRC byte and thus CRC checking must be ignored."
+//    "The transaction has no response phase from eSPI target."
+//    "All I/O lines are driven to high ('1') for 16 eSPI clocks and tri-stated
+//     at the deassertion edge of CS#, meeting the tSHQZ Output Disable timing."
+//
+//  and what the target does with it:
+//
+//    "Ignore all the subsequent bits received."
+//    "Bypass or ignore the CRC checking."
+//    "Wait until CS# deassertion and assert the in-band reset internally at
+//     the CS# deassertion edge." (p.123)
+//
+//  WHY THE ROW HAS NO ELEMENTS AND NO LENGTH. Two of those sentences pull in
+//  opposite directions and both are load bearing. Sixteen clocks is what the
+//  *controller* drives, and Figure 65 draws exactly that -- CS# falling,
+//  sixteen numbered clocks with all four data lines high, CS# rising. Ignoring
+//  every subsequent bit and waiting for the deassertion edge is what the
+//  *target* does, and that only means anything if the frame may be longer.
+//
+//  An analyzer sits where the target sits, so the decoder reads to the chip
+//  select edge and treats the sixteen clocks as a property to check rather than
+//  a length to read. The capture this repository is pinned against settles it:
+//  its opening frame is twelve bytes, ninety-six clocks, and only the first
+//  four of them FFh.
+//
+//  SIXTEEN CLOCKS IS CLOCKS, NOT BYTES, and that is the point of the number.
+//  The opcode occupies eight clocks in Single I/O, four in Dual and two in
+//  Quad, so sixteen clocks of all ones carries FFh first whichever mode the
+//  target believes it is in -- which is what section 8.3.2 means by "the target
+//  is able to detect the In-band RESET command opcode regardless of the I/O
+//  mode". A whole frame is two bytes in Single, four in Dual, eight in Quad.
+//
+//  WHAT IT RESETS, p.123: "Offset 008h-00Bh: General Capabilities and
+//  Configurations", and "All other target registers are not reset by the
+//  In-band RESET, and they must retain their values across the In-band RESET."
+//  Section 6.2.1.3, p.94, says the same thing from the register's own side:
+//  "This register is also reset by the In-band RESET command."
+//
+//  TWO SECTIONS POINT BACK AT 8.3.2 AND NEITHER IS TABLE 2. The second is
+//  section 5.1, p.86, and it answers a question Figure 65 raises and never
+//  settles -- why the figure drives all four data lines when Single I/O gives
+//  I/O[1] to the target:
+//
+//    "In Single I/O mode, I/O[1:0] pins are uni-directional. eSPI controller
+//     drives the I/O[0] during command phase, and response from target is
+//     driven on the I/O[1]. eSPI target is required to tri-state I/O[1] during
+//     command phase as I/O[1] can be driven by eSPI controller such as when
+//     initiating an In-Band Reset command."
+//
+//  So the RESET is the reason the target has to tri-state its own response lane
+//  through every command phase, not just this one. Nothing here needs to act on
+//  it -- LanesFor( Single, Command ) already reads the opcode off I/O[0] and
+//  ignores the rest, which is the right answer whether or not the controller is
+//  driving them -- but it is the third statement of this transaction in the
+//  document and the only one that explains the figure.
+//
+//  THAT IS A SESSION STATE FACT, not just a register one. Offset 008h holds
+//  I/O Mode Select and CRC Checking Enable, so a RESET puts the bus back to
+//  Single I/O with CRC checking off -- the state ConfigResetValue() returns.
+//  Nothing follows session state across transactions yet; that is phase 7.
+//
+//  TWO FACTS HERE ARE DELIBERATELY NOT IN CODE. The 20MHz ceiling and the
+//  tSHQZ tri-state are properties of the waveform, and nothing in this tree
+//  carries a frequency or a drive strength to check them against. Recorded
+//  here so the next reader does not have to find p.122 again to learn they
+//  were read.
 // ---------------------------------------------------------------------------
 
-// X( OPCODE_NAME, COMMAND_ELEMENTS, RESPONSE_ELEMENTS )
+// Figure 65, p.123: the clocks the controller drives every I/O line high for.
+#define ESPI_RESET_CLOCKS 16u
+
+// p.123: the inclusive offset range an In-band RESET returns to its default.
+#define ESPI_RESET_REGISTER_START 0x008u
+#define ESPI_RESET_REGISTER_END 0x00Bu
+
+// X( OPCODE_NAME, COMMAND_ELEMENTS, RESPONSE_ELEMENTS, FRAMING )
 #define ESPI_PACKET_SHAPE_TABLE( X )                                                                                               \
     /* --- Channel Independent, Figures 20/22/23, pp.35-37 --- */                                                                  \
-    X( GET_CONFIGURATION, ESPI_CMD( Addr16 ), ESPI_RSP( Data32, Status16 ) )                                                       \
-    X( SET_CONFIGURATION, ESPI_CMD( Addr16, Data32 ), ESPI_RSP( Status16 ) )                                                       \
-    X( GET_STATUS, ESPI_CMD(), ESPI_RSP( Status16 ) )                                                                              \
+    X( GET_CONFIGURATION, ESPI_CMD( Addr16 ), ESPI_RSP( Data32, Status16 ), Framed )                                               \
+    X( SET_CONFIGURATION, ESPI_CMD( Addr16, Data32 ), ESPI_RSP( Status16 ), Framed )                                               \
+    X( GET_STATUS, ESPI_CMD(), ESPI_RSP( Status16 ), Framed )                                                                      \
+    /* --- Channel Independent, section 8.3.2 pp.122-123, Figure 65 p.123 --- */                                                   \
+    X( RESET, ESPI_CMD(), ESPI_RSP(), NoCrcNoResponse )                                                                            \
     /* --- Virtual Wire Channel, Figure 41, p.58 --- */                                                                            \
-    X( GET_VWIRE, ESPI_CMD(), ESPI_RSP( VwirePacket, Status16 ) )                                                                  \
-    X( PUT_VWIRE, ESPI_CMD( VwirePacket ), ESPI_RSP( Status16 ) )                                                                  \
+    X( GET_VWIRE, ESPI_CMD(), ESPI_RSP( VwirePacket, Status16 ), Framed )                                                          \
+    X( PUT_VWIRE, ESPI_CMD( VwirePacket ), ESPI_RSP( Status16 ), Framed )                                                          \
     /* --- Peripheral Channel, Figures 24/25/27, pp.38-41 --- */                                                                   \
-    X( PUT_PC, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )                                                            \
-    X( PUT_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( CycleHeader, Payload, Status16 ) )                                      \
-    X( GET_PC, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )                                                            \
-    X( GET_NP, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )                                                            \
+    X( PUT_PC, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ), Framed )                                                    \
+    X( PUT_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( CycleHeader, Payload, Status16 ), Framed )                              \
+    X( GET_PC, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ), Framed )                                                    \
+    X( GET_NP, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ), Framed )                                                    \
     /* --- Peripheral Channel short cycles, Figure 26, p.40 --- */                                                                 \
-    X( PUT_IORD_SHORT, ESPI_CMD( IoAddr16 ), ESPI_RSP( ShortData, Status16 ) )                                                     \
-    X( PUT_IOWR_SHORT, ESPI_CMD( IoAddr16, ShortData ), ESPI_RSP( Status16 ) )                                                     \
-    X( PUT_MEMRD32_SHORT, ESPI_CMD( MemAddr32 ), ESPI_RSP( ShortData, Status16 ) )                                                 \
-    X( PUT_MEMWR32_SHORT, ESPI_CMD( MemAddr32, ShortData ), ESPI_RSP( Status16 ) )                                                 \
+    X( PUT_IORD_SHORT, ESPI_CMD( IoAddr16 ), ESPI_RSP( ShortData, Status16 ), Framed )                                             \
+    X( PUT_IOWR_SHORT, ESPI_CMD( IoAddr16, ShortData ), ESPI_RSP( Status16 ), Framed )                                             \
+    X( PUT_MEMRD32_SHORT, ESPI_CMD( MemAddr32 ), ESPI_RSP( ShortData, Status16 ), Framed )                                         \
+    X( PUT_MEMWR32_SHORT, ESPI_CMD( MemAddr32, ShortData ), ESPI_RSP( Status16 ), Framed )                                         \
     /* --- OOB Message Channel, Table 2 p.26, Figures 62-63 p.117 --- */                                                           \
-    X( PUT_OOB, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )                                                           \
-    X( GET_OOB, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )                                                           \
+    X( PUT_OOB, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ), Framed )                                                   \
+    X( GET_OOB, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ), Framed )                                                   \
     /* --- Flash Access Channel, Controller Attached, Table 2 pp.26-27 --- */                                                      \
-    X( PUT_FLASH_C, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )                                                       \
-    X( GET_FLASH_NP, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )                                                      \
+    X( PUT_FLASH_C, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ), Framed )                                               \
+    X( GET_FLASH_NP, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ), Framed )                                              \
     /* --- Flash Access Channel, Target Attached, Table 2 p.27 --- */                                                              \
-    X( PUT_FLASH_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ) )                                                      \
-    X( GET_FLASH_C, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ) )
+    X( PUT_FLASH_NP, ESPI_CMD( CycleHeader, Payload ), ESPI_RSP( Status16 ), Framed )                                              \
+    X( GET_FLASH_C, ESPI_CMD(), ESPI_RSP( CycleHeader, Payload, Status16 ), Framed )
 
 #endif // ESPI_TABLE_PACKET_SHAPES_H

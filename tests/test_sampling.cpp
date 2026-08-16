@@ -52,8 +52,12 @@ using FixtureFrame = espi_test::Frame;
 namespace
 {
 
-// Every fixture T1 exercises. Listed rather than globbed so that a fixture
-// added without a T2 entry is a visible omission.
+// Every fixture T1 exercises at Single I/O. Listed rather than globbed so that
+// a fixture added without a T2 entry is a visible omission.
+//
+// One T1 fixture is deliberately absent: reset_quad.espi, whose .expected is
+// written for Quad I/O because Figure 65's sixteen clocks are eight bytes
+// there. It is replayed in TestDualAndQuadGeometry instead.
 const char* const kFixtures[] = {
     "get_configuration.espi",        "set_configuration.espi",
     "get_vwire.espi",                "config_oob_channel.espi",
@@ -71,6 +75,7 @@ const char* const kFixtures[] = {
     "config_flash_rpmc.espi",        "config_device_and_flash.espi",
     "status_all_bits.espi",          "response_errors.espi",
     "wait_state.espi",               "malformed.espi",
+    "reset.espi",
 };
 
 std::string VectorPath( const std::string& name )
@@ -233,6 +238,13 @@ void TestDualAndQuadGeometry()
     CheckWaveformMatchesExpected( "get_vwire.espi", espi::IoMode::Quad );
     CheckWaveformMatchesExpected( "get_configuration.espi", espi::IoMode::Quad );
     CheckWaveformMatchesExpected( "put_pc_memory_write32.espi", espi::IoMode::Quad );
+
+    // The one fixture whose expectation is mode specific rather than mode
+    // independent. Section 8.3.2's RESET is defined in CLOCKS -- sixteen of
+    // them, Figure 65 p.123 -- so the same command is two bytes in Single I/O
+    // and eight in Quad, and its decode names a different byte count for each.
+    // reset_quad.espi holds the Quad form and is not in kFixtures above.
+    CheckWaveformMatchesExpected( "reset_quad.espi", espi::IoMode::Quad );
 }
 
 // -------------------------------------------------------------------------

@@ -1,0 +1,10 @@
+Command
+  Opcode  0xFF  RESET
+  Ignored  1 byte  FF
+  Register Reset  008h-00Bh General Capabilities and Configurations at the chip select deassertion edge; every other register retains its value
+---
+Command
+  Opcode  0xFF  RESET
+  Ignored  0 bytes
+    Reset Pattern  Figure 65 draws 16 clocks with every I/O line high; this frame is 8 clocks [!]
+  Register Reset  008h-00Bh General Capabilities and Configurations at the chip select deassertion edge; every other register retains its value

@@ -38,7 +38,16 @@ constexpr Element MemAddr32 = Element::MemAddr32;
 constexpr Element ShortData = Element::ShortData;
 } // namespace elements
 
+// Same reason as `elements`: the framing column is meant to read as one word
+// against section 8.3.2, not as a qualified enumerator.
+namespace framing
+{
+constexpr PacketFraming Framed = PacketFraming::Framed;
+constexpr PacketFraming NoCrcNoResponse = PacketFraming::NoCrcNoResponse;
+} // namespace framing
+
 using namespace elements;
+using namespace framing;
 
 // Overloads rather than an initializer list, because a phase may legitimately
 // have no elements at all -- GET_STATUS is opcode then CRC, nothing between --
@@ -76,7 +85,8 @@ struct ShapeEntry
     PacketShape shape;
 };
 
-#define ESPI_SHAPE_ENTRY( NAME, CMD, RSP ) ShapeEntry{ kOpcode_##NAME, kOpcodeMask_##NAME, PacketShape{ CMD, RSP } },
+#define ESPI_SHAPE_ENTRY( NAME, CMD, RSP, FRAMING )                                                                                \
+    ShapeEntry{ kOpcode_##NAME, kOpcodeMask_##NAME, PacketShape{ CMD, RSP, FRAMING } },
 const ShapeEntry kShapes[] = { ESPI_PACKET_SHAPE_TABLE( ESPI_SHAPE_ENTRY ) };
 #undef ESPI_SHAPE_ENTRY
 
@@ -156,6 +166,21 @@ bool ElementPresentOnlyOnAccept( Element element )
         break;
     }
     return false;
+}
+
+unsigned ResetCommandClocks()
+{
+    return ESPI_RESET_CLOCKS;
+}
+
+uint16_t ResetRegisterStart()
+{
+    return ESPI_RESET_REGISTER_START;
+}
+
+uint16_t ResetRegisterEnd()
+{
+    return ESPI_RESET_REGISTER_END;
 }
 
 bool LookupShape( uint8_t opcode, PacketShape* out )

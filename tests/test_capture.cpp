@@ -32,10 +32,16 @@
 // ours is argued from a cited page, and the arguing is the point.
 //
 // WHAT THE CAPTURE CONTAINS. Configuration and virtual wire traffic only: 55
-// GET_CONFIGURATION, 2 SET_CONFIGURATION, 4 GET_VWIRE, and one fragment of a
-// frame that was already in progress when the export began. No wait states, no
-// GET_STATUS, no PUT_VWIRE, nothing malformed, and no peripheral, OOB or flash
-// packets. So T4 reaches stages A through C and touches nothing in D or E.
+// GET_CONFIGURATION, 2 SET_CONFIGURATION, 4 GET_VWIRE, and one RESET that was
+// already in progress when the export began. No wait states, no GET_STATUS, no
+// PUT_VWIRE, nothing malformed, and no peripheral, OOB or flash packets. So T4
+// reaches stages A through C and touches nothing in D or E.
+//
+// That RESET is the whole reason section 8.3.2 got read at all: it is frame 0,
+// the export calls all twelve of its bytes Reserved, and nothing in Table 2
+// points at the section that defines it. It is a fragment -- the chip select
+// assertion edge is not in the file -- so it is decoded and flagged against
+// Figure 65 rather than treated as evidence about a well formed RESET.
 //
 // RULE R2. tests/vectors/espi_dump.expected was written out longhand from the
 // bytes and the specification -- never by running the decoder and keeping what
@@ -149,6 +155,8 @@ const Vocabulary kVocabulary[] = {
     { "Length", "Count", "section 4.2.2 p.57 calls it the Virtual Wire Count, and it is 0-based" },
 
     // The 12 bytes of the opening fragment, handled by IsKnownDisagreement.
+    // The export does not recognise FFh as an opcode; Table 2 p.27 and section
+    // 8.3.2 pp.122-123 do, so this is the one place ours reads more than theirs.
     { "Reserved", nullptr, "the opening fragment -- see IsKnownDisagreement" },
 };
 
@@ -175,19 +183,22 @@ const char* OurNameFor( const std::string& theirs, bool* known )
 //  a command opcode at all. Table 2, p.27 defines FFh as RESET, "In-band RESET
 //  command", and section 8.3.2 pp.122-123 gives the whole transaction with
 //  Figure 65 drawing it. So the export is wrong about the first byte, and we
-//  name it.
+//  name it -- and wrong about the other eleven, which section 8.3.2 makes the
+//  bits the target ignores rather than anything reserved.
 //
-//  For the other eleven our decoder attributes nothing, because no packet
-//  shape for RESET has been transcribed and inventing a length for eleven
-//  bytes is the failure mode this repository is built to avoid. That is a gap
-//  in our transcription -- docs/HANDOFF.md carries it as next item 1 -- and
-//  until it is closed, "we decode less of this frame than they do" is the
-//  honest state and this exception says so.
+//  THIS ENTRY USED TO SAY WE DECODED LESS OF THIS FRAME THAN THEY DID. Until
+//  section 8.3.2 was read, RESET had no transcribed shape, so the decoder named
+//  the opcode and attributed nothing to the eleven bytes behind it. That was a
+//  gap in our transcription rather than in the document, and it is now closed.
 //
-//  Note also that the frame is a fragment: chip select was already asserted
-//  when the export began, so its byte boundaries are wherever the other
-//  decoder started counting, and neither side can claim to know where the
-//  transaction really started.
+//  WHAT REMAINS TRUE, AND IS WHY THIS FRAME IS STILL NOT EVIDENCE ABOUT WHAT A
+//  RESET LOOKS LIKE. It is a fragment. Chip select was already asserted on the
+//  export's pre-trigger row, so the assertion edge is not in the file at all
+//  and the byte boundaries are wherever the other decoder started counting.
+//  Twelve bytes is 96 clocks where Figure 65 draws 16, and only the first four
+//  are FFh -- so our decode reports the frame and flags it against the figure,
+//  which is all either side can honestly do with it. tests/vectors/link/reset.espi
+//  is the well formed command, hand built, and says so.
 // ---------------------------------------------------------------------------
 bool IsKnownDisagreement( size_t frame, size_t byte_index, const std::string& theirs, const char* ours )
 {
@@ -200,8 +211,9 @@ bool IsKnownDisagreement( size_t frame, size_t byte_index, const std::string& th
     if( byte_index == 0 )
         return ours != nullptr && std::string( ours ) == "Opcode";
 
-    // Bytes 1-11: they say Reserved, we attribute nothing.
-    return ours == nullptr;
+    // Bytes 1-11: they say Reserved, we say Ignored -- section 8.3.2 p.122,
+    // "Ignore all the subsequent bits received."
+    return ours != nullptr && std::string( ours ) == "Ignored";
 }
 
 // ---------------------------------------------------------------------------
@@ -520,13 +532,24 @@ void TestCaptureAgainstExport()
         const espi_test::FixtureByteSource& accounting = source.Accounting();
         if( i == kFragmentFrame )
         {
-            // The one frame where reading every byte would be wrong: RESET has
-            // no transcribed shape, so the decoder names the opcode and stops
-            // rather than inventing a length for the eleven bytes behind it.
-            // Asserting the leftover count pins "stopped" as the behaviour.
-            TEST_CHECK( txn.HasError() );
+            // The one frame with no turn-around: section 8.3.2, p.122, gives
+            // RESET no response phase, so the generic assertions below do not
+            // apply to it. What does apply is that the frame is fully
+            // accounted for -- the decoder reads to the chip select edge
+            // because p.123 has the target "Wait until CS# deassertion", so
+            // every one of the twelve bytes is claimed by a field.
+            //
+            // No error: the frame does not match Figure 65 and says so, but a
+            // controller driving the ignored bits low is a deviation the target
+            // absorbs, not a decode that failed.
+            if( !accounting.CommandFullyConsumed() )
+                std::fprintf( stderr, "FAIL  frame %zu (line %d): %zu command byte(s) left unread\n", i,
+                              frame.first_line, accounting.CommandBytesLeft() );
+            TEST_CHECK( accounting.CommandFullyConsumed() );
+            TEST_CHECK( accounting.ResponseFullyConsumed() );
             TEST_CHECK( !accounting.TurnedAround() );
-            TEST_CHECK_EQ( accounting.CommandBytesLeft(), size_t( 11 ) );
+            TEST_CHECK( !txn.HasError() );
+            ++clean;
             continue;
         }
 
@@ -551,7 +574,7 @@ void TestCaptureAgainstExport()
     // Stated as numbers so that frames or bytes silently dropped from the loop
     // are visible rather than showing up as a shorter clean run.
     TEST_CHECK_EQ( decoded, size_t( 62 ) );
-    TEST_CHECK_EQ( clean, size_t( 61 ) );
+    TEST_CHECK_EQ( clean, size_t( 62 ) );
     TEST_CHECK_EQ( bytes_compared, size_t( 732 ) );
     TEST_CHECK_EQ( bytes_agreed, size_t( 720 ) );
     TEST_CHECK_EQ( disagreements_explained, size_t( 12 ) );

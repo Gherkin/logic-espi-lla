@@ -3,7 +3,9 @@ Command
 ---
 Command
   Opcode  0xFF  RESET
-  Packet Shape  no shape transcribed for RESET -- packet length unknown, decode stopped [ERROR]
+  Ignored  1 byte  00
+    Reset Pattern  Figure 65 draws 16 clocks with every I/O line high; this frame has ignored bytes that are not all FFh [!]
+  Register Reset  008h-00Bh General Capabilities and Configurations at the chip select deassertion edge; every other register retains its value
 ---
 Command
   Opcode  0x21  GET_CONFIGURATION

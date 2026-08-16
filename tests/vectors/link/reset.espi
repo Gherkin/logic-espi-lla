@@ -1,0 +1,32 @@
+# The In-band RESET command. Hand built -- see below for why the capture could
+# not supply this one.
+#
+# Section 8.3.2, pp.122-123, and Figure 65 on p.123. RESET is the only opcode
+# in Table 2 with no CRC byte and no response phase, so both transactions here
+# are a command phase and nothing else. There is no TAR line and there is no
+# RSP line, and the decoder must agree: reading a CRC or turning around would
+# leave the frame short and the test says so.
+#
+# Decoded in Single I/O, where a byte is eight clocks.
+#
+# 1. The command Figure 65 draws: sixteen eSPI clocks with every I/O line
+#    driven high, which in Single I/O is two bytes. The first is the opcode
+#    FFh; the second is bits the target ignores.
+CMD FF FF
+
+# 2. The same command with chip select deasserting straight after the opcode --
+#    eight clocks, half of what Figure 65 draws, and nothing left for the target
+#    to ignore.
+#
+#    NOTHING HERE IS TRUNCATED, and that is the point of the case. RESET
+#    requires no byte after the opcode, so a frame that stops there is complete
+#    in the only sense the decoder can check; it just does not match the figure.
+#    Every other opcode in the table would report a missing CRC.
+CMD FF
+
+# WHY THIS IS NOT A CAPTURE FIXTURE. espi_dump.txt does open with a RESET, but
+# it opens *inside* it: chip select is already asserted on the export's
+# pre-trigger row, so the frame's byte boundaries are wherever the other decoder
+# started counting and its twelve bytes are neither sixteen clocks nor all ones.
+# That frame is worth decoding and it is decoded, in espi_dump.expected -- it is
+# just not evidence about what a well formed RESET looks like.

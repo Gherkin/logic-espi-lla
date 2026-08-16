@@ -1,0 +1,19 @@
+# The same In-band RESET command, decoded in Quad I/O.
+#
+# Section 8.3.2, p.122, and Figure 65, p.123. The command is SIXTEEN CLOCKS,
+# not two bytes, and that is the whole reason the specification states it in
+# clocks: the opcode occupies eight clocks in Single I/O, four in Dual and two
+# in Quad, so sixteen clocks of all ones puts FFh first whichever mode the
+# target believes it is in. Section 8.3.2 says exactly that -- "the target is
+# able to detect the In-band RESET command opcode regardless of the I/O mode,
+# i.e. either in Single, Dual or Quad I/O configuration."
+#
+# So the same command is two bytes in Single, four in Dual and EIGHT IN QUAD.
+#
+# This file is decoded at Quad. A decoder that had hardcoded eight clocks per
+# byte would read these eight bytes as sixty-four clocks and report a frame four
+# times longer than Figure 65 draws, which is what makes this fixture worth
+# having: it is the only place the clocks-to-bytes conversion is observable.
+#
+# Hand built. The capture is Single I/O throughout and never switches.
+CMD FF FF FF FF FF FF FF FF

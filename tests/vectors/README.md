@@ -44,6 +44,17 @@ malformed. Those fixtures are constructed from the specification by the same
 person who wrote the decoder, so they catch a decoder that disagrees with that
 reading — not a reading that is wrong. Keep the distinction visible.
 
+`reset.espi` and `reset_quad.espi` are the two with a mode attached. §8.3.2
+defines the In-band RESET in **clocks** — sixteen of them, Figure 65 p.123 —
+rather than in bytes, so the same command is two bytes in Single I/O and eight
+in Quad, and `reset_quad.espi` is the only fixture whose `.expected` is written
+for a mode other than Single. They are also the only fixtures with no `TAR` line
+and no `RSP` line at all: RESET has no CRC byte and no response phase.
+
+The capture does open with a RESET, and it is decoded in `espi_dump.expected`,
+but it is a fragment — see below — so it says nothing about what a well formed
+one looks like.
+
 ## `espi_dump.txt`
 
 857 lines of an eSPI link coming up, exported from a third-party decoder
@@ -86,7 +97,12 @@ Two things about the file are worth knowing before you edit anything near it:
 
 - **It opens mid-frame.** Chip select is already asserted on the export's first
   row, at `-0.00012 ms`, so the first of the 62 frames is a fragment of a
-  transaction that began before the capture did. Its first byte is `FFh`.
+  transaction that began before the capture did. Its first byte is `FFh` —
+  `RESET`, which the export does not recognise and labels `Reserved` along with
+  the other eleven. We decode it, and flag it: twelve bytes is 96 clocks where
+  Figure 65 draws 16, and only the first four are `FFh`. The assertion edge is
+  not in the file, so its byte boundaries are wherever the other decoder started
+  counting and neither side can do better than report what is there.
 - **Its last row has no label at all** — just a timestamp, the signals, and an
   empty field. Chip select reads deasserted there like it does on every `IDLE`
   row, so it is taken as the end of the last frame. The parser accepts that on

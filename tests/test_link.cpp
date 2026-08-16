@@ -59,7 +59,12 @@ std::string ReadFile( const std::string& path, bool* ok )
 // Decode every transaction in a fixture and render it. Multiple transactions
 // are separated by a --- line, which is this test's formatting, not the
 // decoder's.
-std::string DecodeFixture( const char* name, bool strict_consumption )
+//
+// The I/O mode is a parameter because one fact in the tree is stated in clocks
+// rather than bytes -- Figure 65's sixteen-clock RESET -- and the only way to
+// observe the conversion is to decode the same command at two modes. Every
+// other fixture is Single I/O, which is what the capture is.
+std::string DecodeFixture( const char* name, bool strict_consumption, espi::IoMode mode = espi::IoMode::Single )
 {
     std::vector<Frame> frames;
     std::string error;
@@ -79,7 +84,7 @@ std::string DecodeFixture( const char* name, bool strict_consumption )
     std::string out;
     for( size_t i = 0; i < frames.size(); ++i )
     {
-        FixtureByteSource source( frames[ i ] );
+        FixtureByteSource source( frames[ i ], mode );
         LinkDecoder decoder( &source );
         Transaction txn;
         if( !decoder.Decode( &txn ) )
@@ -112,14 +117,23 @@ std::string DecodeFixture( const char* name, bool strict_consumption )
             std::fprintf( stderr, "FAIL  %s: %zu response byte(s) left unread\n", name, source.ResponseBytesLeft() );
         TEST_CHECK( source.ResponseFullyConsumed() );
 
-        TEST_CHECK( source.TurnedAround() );
+        // The fixture states whether there is a turn-around by carrying a TAR
+        // line or not, so this is a comparison rather than a constant. RESET is
+        // why: section 8.3.2 p.122 gives it no response phase, so a decoder
+        // that turned around there would be inventing one. Every other fixture
+        // has a TAR line and both sides read true, exactly as before.
+        if( source.TurnedAround() != frames[ i ].has_turnaround )
+            std::fprintf( stderr, "FAIL  %s transaction %zu: fixture %s a turn-around, decoder %s\n", name, i,
+                          frames[ i ].has_turnaround ? "has" : "has no", source.TurnedAround() ? "took one" : "did not" );
+        TEST_CHECK( source.TurnedAround() == frames[ i ].has_turnaround );
     }
     return out;
 }
 
-void CheckAgainstExpected( const char* fixture, const char* expected_name, bool strict_consumption )
+void CheckAgainstExpected( const char* fixture, const char* expected_name, bool strict_consumption,
+                           espi::IoMode mode = espi::IoMode::Single )
 {
-    const std::string got = DecodeFixture( fixture, strict_consumption );
+    const std::string got = DecodeFixture( fixture, strict_consumption, mode );
 
     bool ok = false;
     const std::string want = ReadFile( VectorPath( expected_name ), &ok );
@@ -237,6 +251,24 @@ void TestDecodeCoverageVectors()
     CheckAgainstExpected( "config_device_and_flash.espi", "config_device_and_flash.expected", true );
 }
 
+// The In-band RESET command, section 8.3.2 pp.122-123 and Figure 65 p.123.
+//
+// The only opcode in Table 2 whose command phase has no CRC and whose
+// transaction has no response phase, so it is the only fixture here with
+// neither a TAR line nor an RSP line. A decoder still reading a CRC byte would
+// run off the end of the frame and report it truncated.
+void TestReset()
+{
+    // Sixteen clocks of all ones, then the same command stopping one byte
+    // short of what Figure 65 draws.
+    CheckAgainstExpected( "reset.espi", "reset.expected", true );
+
+    // The same sixteen clocks in Quad I/O, where they are eight bytes. This is
+    // the only place the clocks-to-bytes conversion is observable: at Single
+    // I/O a hardcoded eight-clocks-per-byte gives the right answer.
+    CheckAgainstExpected( "reset_quad.espi", "reset_quad.expected", true, espi::IoMode::Quad );
+}
+
 void TestWaitState()
 {
     // The response CRC in this fixture covers 08 0F 01 only. If either 0Fh
@@ -264,9 +296,13 @@ void TestFixtureLoaderRejectsGarbage()
     TEST_CHECK( !error.empty() );
 }
 
-// Every command phase is opcode ... CRC and every response phase is response
-// ... CRC. The shape table states only what sits between, so that invariant is
-// asserted here once rather than repeated on every table row.
+// A Framed command phase is opcode ... CRC and its response phase is response
+// ... CRC. The shape table states only what sits between, so that is asserted
+// here once rather than repeated on every table row.
+//
+// It used to be written down as an invariant holding for every opcode. It does
+// not: section 8.3.2, p.122, gives RESET neither a CRC byte nor a response
+// phase, so the framing is a column now and this test reads it.
 void TestFramingInvariant()
 {
     struct Case
@@ -286,6 +322,7 @@ void TestFramingInvariant()
     {
         PacketShape shape;
         TEST_CHECK( LookupShape( c.opcode, &shape ) );
+        TEST_CHECK( shape.framing == PacketFraming::Framed );
 
         size_t command = 1 + 1; // opcode + CRC
         for( uint8_t i = 0; i < shape.command.count; ++i )
@@ -299,59 +336,125 @@ void TestFramingInvariant()
     }
 }
 
-// An opcode with no transcribed shape must not resolve. This is what keeps a
-// gap a gap instead of a guess, and the list shrinking is the progress marker:
-// stage D took the eight peripheral opcodes off it, leaving OOB, flash and
-// RESET for stage E.
+// RESET, section 8.3.2 pp.122-123, typed from the rendered pages.
 //
-// RESET is the last one on the list, and it is a gap in the transcription
-// rather than in the document: §8.3.2 p.122 and Figure 65 p.123 define the
-// whole transaction -- no CRC, no response phase, 16 clocks of all ones -- and
-// nothing in Table 2 points at them. Transcribing it means changing
-// PacketShape rather than adding a row, because TestFramingInvariant below
-// assumes every command phase ends in a CRC. docs/HANDOFF.md carries it as
-// next item 1.
-void TestUntranscribedShapesAreGaps()
+// The three numbers it carries, and none of them is an element count: the
+// packet has no fields at all.
+void TestResetTransaction()
 {
-    const uint8_t no_shape[] = {
-        0xFF, // RESET -- §8.3.2 pp.122-123 read, not yet transcribed
-    };
-    for( uint8_t opcode : no_shape )
+    PacketShape shape;
+    TEST_CHECK( LookupShape( 0xFF, &shape ) );
+
+    // "No CRC byte and thus CRC checking must be ignored." / "The transaction
+    // has no response phase from eSPI target." -- p.122.
+    TEST_CHECK( shape.framing == PacketFraming::NoCrcNoResponse );
+    TEST_CHECK_EQ( shape.command.count, uint8_t( 0 ) );
+    TEST_CHECK_EQ( shape.response.count, uint8_t( 0 ) );
+
+    // "All I/O lines are driven to high ('1') for 16 eSPI clocks", p.122, and
+    // Figure 65 on p.123 draws sixteen numbered clocks. CLOCKS, NOT BYTES --
+    // which is the whole reason the specification states it that way, because
+    // it is what makes the opcode recognisable "regardless of the I/O mode".
+    TEST_CHECK_EQ( ResetCommandClocks(), 16u );
+    TEST_CHECK_EQ( ResetCommandClocks() / static_cast<unsigned>( ClocksPerByte( espi::IoMode::Single ) ), 2u );
+    TEST_CHECK_EQ( ResetCommandClocks() / static_cast<unsigned>( ClocksPerByte( espi::IoMode::Dual ) ), 4u );
+    TEST_CHECK_EQ( ResetCommandClocks() / static_cast<unsigned>( ClocksPerByte( espi::IoMode::Quad ) ), 8u );
+
+    // "Offset 008h-00Bh: General Capabilities and Configurations", p.123, and
+    // "All other target registers are not reset by the In-band RESET". The
+    // range is one register wide, and it is the register holding I/O Mode
+    // Select and CRC Checking Enable -- so this is also the statement that a
+    // RESET puts the bus back into Single I/O with CRC checking off.
+    TEST_CHECK_EQ( ResetRegisterStart(), uint16_t( 0x008 ) );
+    TEST_CHECK_EQ( ResetRegisterEnd(), uint16_t( 0x00B ) );
+
+    const char* name = nullptr;
+    TEST_CHECK( LookupConfigRegister( ResetRegisterStart(), &name ) );
+    TEST_CHECK( name != nullptr && std::string( name ) == "General Capabilities and Configurations" );
+
+    // Section 6.2.1.3, p.94, is the only place in the document that points back
+    // at section 8.3.2 -- "This register is also reset by the In-band RESET
+    // command." Checked here as the two statements agreeing: the offset read
+    // off p.123 has to land on the register p.94 marks.
+    const char* end_name = nullptr;
+    ClassifyConfigAddress( ResetRegisterEnd(), &end_name );
+    TEST_CHECK( end_name != nullptr && std::string( end_name ) == "General Capabilities and Configurations" );
+}
+
+// The opcode table and the shape table must agree, and the gap list is empty.
+//
+// This test used to carry a hand-written list of opcodes with no transcribed
+// shape, shrinking as each stage landed: stage D took the eight peripheral
+// opcodes off it, stage E the six OOB and flash ones, and RESET was the last
+// entry. Transcribing section 8.3.2 emptied it, so the list is replaced by the
+// property it was standing in for -- every opcode Table 2 defines resolves to
+// a shape, checked across the whole encoding space rather than by example.
+//
+// The "no shape transcribed" branch in LinkDecoder is therefore unreachable
+// today. It stays, because it is what keeps a future opcode a gap instead of a
+// guess: an addendum encoding added to Opcodes.h without a row in
+// PacketShapes.h would fire it, and this test would fail first.
+void TestEveryOpcodeHasAShape()
+{
+    size_t defined = 0;
+    size_t unframed = 0;
+
+    for( unsigned byte = 0; byte <= 0xFF; ++byte )
     {
-        if( LookupShape( opcode, nullptr ) )
-            std::fprintf( stderr, "FAIL  opcode 0x%02X resolved to a shape that was never transcribed\n", opcode );
-        TEST_CHECK( !LookupShape( opcode, nullptr ) );
+        const uint8_t opcode = static_cast<uint8_t>( byte );
+        OpcodeInfo info;
+        if( !LookupOpcode( opcode, &info ) )
+        {
+            // An encoding Table 2 does not define must not resolve to a shape
+            // either. This is the other half of case 1 in malformed.espi.
+            if( LookupShape( opcode, nullptr ) )
+                std::fprintf( stderr, "FAIL  0x%02X is not a defined opcode but resolves to a shape\n", opcode );
+            TEST_CHECK( !LookupShape( opcode, nullptr ) );
+            continue;
+        }
+
+        ++defined;
+        PacketShape shape;
+        if( !LookupShape( opcode, &shape ) )
+            std::fprintf( stderr, "FAIL  opcode 0x%02X (%s) has no packet shape\n", opcode, info.name );
+        TEST_CHECK( LookupShape( opcode, &shape ) );
+
+        if( shape.framing == PacketFraming::NoCrcNoResponse )
+        {
+            // Section 8.3.2 is the only place in the document that takes a
+            // command phase's CRC and a whole response phase away, so exactly
+            // one opcode may carry this framing.
+            ++unframed;
+            if( std::string( info.name ) != "RESET" )
+                std::fprintf( stderr, "FAIL  %s has RESET's framing and is not RESET\n", info.name );
+            TEST_CHECK( std::string( info.name ) == "RESET" );
+        }
     }
 
-    // Everything else does resolve now. Asserting that here as well keeps the
-    // two halves of this test in one place: a shape quietly dropped from the
-    // table would otherwise just shorten the list above.
-    const uint8_t has_shape[] = {
-        0x00, 0x01, 0x02, 0x03, // PUT_PC, GET_PC, PUT_NP, GET_NP
-        0x40, 0x44, 0x48, 0x4C, // the four short cycles at C1C0 = 00b
-        0x06, 0x07,             // PUT_OOB, GET_OOB          -- stage E
-        0x08, 0x09,             // PUT_FLASH_C, GET_FLASH_NP -- stage E
-        0x0A, 0x0B,             // PUT_FLASH_NP, GET_FLASH_C -- stage E
-    };
-    for( uint8_t opcode : has_shape )
-    {
-        if( !LookupShape( opcode, nullptr ) )
-            std::fprintf( stderr, "FAIL  opcode 0x%02X has no shape\n", opcode );
-        TEST_CHECK( LookupShape( opcode, nullptr ) );
-    }
+    // Table 2 has 20 rows -- 8 peripheral, 2 virtual wire, 2 OOB, 4 flash and
+    // 4 channel independent, RESET among them -- and the four short cycles
+    // cover four encodings each because their mask is FCh, so 32 encodings
+    // resolve. Stated as a number because the loop above would pass just as
+    // happily against a table with rows silently missing.
+    TEST_CHECK_EQ( defined, size_t( 20 + 4 * 3 ) );
+    TEST_CHECK_EQ( unframed, size_t( 1 ) );
 
-    // A short cycle is one shape across all four C1C0 encodings -- Table 2
-    // gives them mask FCh. Matching only the base encoding would leave 41h,
-    // 42h and 43h reporting as undecodable opcodes, which is what an exact
-    // match did before stage D.
+    // A short cycle is one shape across all four C1C0 encodings. Matching only
+    // the base encoding would leave 41h, 42h and 43h reporting as undecodable
+    // opcodes, which is what an exact match did before stage D.
     for( uint8_t base : { uint8_t( 0x40 ), uint8_t( 0x44 ), uint8_t( 0x48 ), uint8_t( 0x4C ) } )
     {
-        for( uint8_t c1c0 = 0; c1c0 < 4; ++c1c0 )
+        PacketShape first;
+        TEST_CHECK( LookupShape( base, &first ) );
+        for( uint8_t c1c0 = 1; c1c0 < 4; ++c1c0 )
         {
             const uint8_t opcode = static_cast<uint8_t>( base + c1c0 );
-            if( !LookupShape( opcode, nullptr ) )
+            PacketShape shape;
+            if( !LookupShape( opcode, &shape ) )
                 std::fprintf( stderr, "FAIL  short opcode 0x%02X has no shape\n", opcode );
-            TEST_CHECK( LookupShape( opcode, nullptr ) );
+            TEST_CHECK( LookupShape( opcode, &shape ) );
+            TEST_CHECK_EQ( shape.command.count, first.command.count );
+            TEST_CHECK_EQ( shape.response.count, first.response.count );
         }
     }
 }
@@ -1920,6 +2023,7 @@ Corpus Load()
         "cycle_type_coverage.expected",      "put_oob_smbus.expected",
         "get_oob_mctp.expected",             "flash_controller_attached.expected",
         "flash_target_attached.expected",    "flash_rpmc.expected",
+        "reset.expected",
     };
 
     Corpus c;
@@ -2009,9 +2113,10 @@ void TestDecodeCoverage()
 
     // --- every opcode with a transcribed packet shape ---
     //
-    // RESET is the exception and stays one: it has no shape, so there is
-    // nothing to decode. Asserting that explicitly keeps this honest when the
-    // gap list finally empties.
+    // There is no exception any more. RESET was the last one -- it had no shape
+    // to decode against until section 8.3.2 was read -- so a shape without a
+    // vector is now a plain failure. TestEveryOpcodeHasAShape is what stops the
+    // gap creeping back in as a silently skipped opcode.
     for( unsigned opcode = 0; opcode <= 0xFF; ++opcode )
     {
         OpcodeInfo info;
@@ -2022,9 +2127,8 @@ void TestDecodeCoverage()
 
         if( !LookupShape( static_cast<uint8_t>( opcode ), nullptr ) )
         {
-            if( std::string( info.name ) != "RESET" )
-                std::fprintf( stderr, "FAIL  %s has no packet shape and is not the known gap\n", info.name );
-            TEST_CHECK( std::string( info.name ) == "RESET" );
+            std::fprintf( stderr, "FAIL  %s has no packet shape\n", info.name );
+            TEST_CHECK( false );
             continue;
         }
 
@@ -2212,11 +2316,13 @@ int main()
     TestTargetEraseBlockField();
     TestDecodeCoverage();
     TestDecodeCoverageVectors();
+    TestReset();
     TestWaitState();
     TestMalformed();
     TestFixtureLoaderRejectsGarbage();
     TestFramingInvariant();
-    TestUntranscribedShapesAreGaps();
+    TestResetTransaction();
+    TestEveryOpcodeHasAShape();
     TestResponseEncodings();
     TestStatusBits();
     TEST_MAIN_RETURN();

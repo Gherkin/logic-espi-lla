@@ -6,6 +6,7 @@
 
 #include "espi/Decode.h"
 #include "espi/LinkDecoder.h"
+#include "espi/Session.h"
 
 #include <cassert>
 
@@ -223,14 +224,30 @@ void EspiAnalyzer::WorkerThread()
     SamplingByteSource source( channels, mSettings->mStartingMode );
     espi::LinkDecoder decoder( &source );
 
+    // The setting is where the session STARTS, not what it is. Nothing on the
+    // bus announces the I/O mode, so a capture that opens mid-session needs to
+    // be told -- and from there the wire decides, because an accepted
+    // SET_CONFIGURATION to 008h or an In-band RESET changes it (espi/Session.h).
+    espi::SessionState session( mSettings->mStartingMode );
+
     for( ;; )
     {
+        // Before the chip select rather than after the last one: this is the
+        // mode the transaction about to be read was sent in, and on the first
+        // pass there is no last one.
+        source.SetMode( session.Mode() );
+
         if( !source.SyncToNextAssertion() )
             return;
 
         espi::Transaction transaction;
         if( !decoder.Decode( &transaction ) )
             return;
+
+        // At the deassertion edge, which is where the specification puts it and
+        // therefore after the whole transaction -- including its response and
+        // its CRC -- has been read in the old mode.
+        session.Apply( transaction );
 
         U64 previous_end = 0;
         for( const espi::Field& field : transaction.fields )

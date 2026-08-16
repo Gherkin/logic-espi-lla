@@ -92,6 +92,21 @@ class WaveformBuilder
         mSample = mGeometry.lead_in;
     }
 
+    // One CS#-delimited transaction at a mode of its own, for a waveform whose
+    // I/O mode changes partway through.
+    //
+    // THE MODE IS STATED, NOT WORKED OUT. This class is a serializer and has
+    // to stay one: a builder that read the SET_CONFIGURATION it was laying
+    // down and switched itself would be following the same reasoning the
+    // decoder follows, and the two agreeing would assert nothing. The caller
+    // says which mode each transaction is in, the same way the fixture says
+    // which bytes it holds.
+    void AddTransaction( const Frame& frame, espi::IoMode mode )
+    {
+        mMode = mode;
+        AddTransaction( frame );
+    }
+
     // One CS#-delimited transaction, laid down exactly as the fixture states
     // it. No length is computed here.
     void AddTransaction( const Frame& frame )

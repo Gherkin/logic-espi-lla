@@ -20,6 +20,7 @@
 #include "espi/Decode.h"
 #include "espi/IoMode.h"
 #include "espi/LinkDecoder.h"
+#include "espi/Session.h"
 
 #include "EspiAnalyzer.h"
 #include "EspiAnalyzerResults.h"
@@ -246,6 +247,169 @@ void TestDualAndQuadGeometry()
     // and eight in Quad, and its decode names a different byte count for each.
     // reset_quad.espi holds the Quad form and is not in kFixtures above.
     CheckWaveformMatchesExpected( "reset_quad.espi", espi::IoMode::Quad );
+}
+
+// -------------------------------------------------------------------------
+//  T2-d. A waveform whose I/O mode changes partway through.
+//
+//  Phase 7's exit criterion, and the only place in the suite where following
+//  the switch is observable. At T1 a fixture is bytes and the bytes are the
+//  same bytes whatever mode carried them, so a state machine that applied the
+//  mode one transaction late -- or never -- decodes identically. Here the mode
+//  decides how many clocks a byte occupies, so a mistimed switch recovers not
+//  a wrong field but no field at all.
+//
+//  WHAT MAKES IT EVIDENCE. The waveform states each transaction's mode
+//  literally, the way the fixture states its bytes; the serializer never looks
+//  at what it is laying down. The analyzer is told only the STARTING mode and
+//  has to work the rest out from the SET_CONFIGURATION and the RESET it
+//  decodes. The expectations are the same hand-written .expected files T1 uses
+//  (R2) -- nothing new was authored to match this.
+// -------------------------------------------------------------------------
+
+// One transaction of a fixture, and the block of its .expected that goes with
+// it. Multiple-transaction .expected files separate their blocks with a ---
+// line, which is the test's formatting and not the decoder's.
+struct Step
+{
+    const char* fixture;
+    size_t index;
+    espi::IoMode mode; // the mode this transaction is ON THE WIRE in
+};
+
+std::string ExpectedBlock( const std::string& fixture, size_t index )
+{
+    bool ok = false;
+    const std::string text = ReadFile( VectorPath( ExpectedName( fixture ) ), &ok );
+    if( !ok )
+    {
+        std::fprintf( stderr, "FAIL  cannot read %s\n", ExpectedName( fixture ).c_str() );
+        TEST_CHECK( false );
+        return {};
+    }
+
+    std::istringstream lines( text );
+    std::string line;
+    std::string block;
+    size_t at = 0;
+    while( std::getline( lines, line ) )
+    {
+        if( line == "---" )
+        {
+            if( at == index )
+                return block;
+            ++at;
+            block.clear();
+            continue;
+        }
+        block += line;
+        block += '\n';
+    }
+    TEST_CHECK_EQ( at, index );
+    return block;
+}
+
+void TestModeSwitchFollowedMidCapture()
+{
+    // Single, then Quad, then Single again -- the switch and its undo, because
+    // a decoder that latched the first change and never came back would pass a
+    // test that only went one way.
+    //
+    //   1. SET_CONFIGURATION of 008h selecting Quad, ACCEPTed. Sent in Single
+    //      I/O: "The SET_CONFIGURATION is completed with the current mode of
+    //      operation" (§5.1, p.86).
+    //   2. An ordinary GET_CONFIGURATION, now in Quad.
+    //   3. An In-band RESET in Quad -- sixteen clocks, which is eight bytes
+    //      there, hence reset_quad.espi rather than reset.espi.
+    //   4. The same GET_CONFIGURATION again, back in Single. Identical bytes
+    //      and identical expected text as step 2, at half the clock rate: it
+    //      only comes back if the RESET was followed.
+    static const Step kSteps[] = {
+        { "set_configuration_io_mode.espi", 0, espi::IoMode::Single },
+        { "get_configuration.espi", 0, espi::IoMode::Quad },
+        { "reset_quad.espi", 0, espi::IoMode::Quad },
+        { "get_configuration.espi", 0, espi::IoMode::Single },
+    };
+
+    std::vector<std::vector<FixtureFrame>> loaded;
+    espi_test::WaveformBuilder builder( espi::IoMode::Single, espi_test::WaveformGeometry{} );
+    std::string want;
+
+    for( const Step& step : kSteps )
+    {
+        loaded.emplace_back();
+        if( !LoadFrames( step.fixture, &loaded.back() ) )
+            return;
+        if( step.index >= loaded.back().size() )
+        {
+            std::fprintf( stderr, "FAIL  %s has no transaction %zu\n", step.fixture, step.index );
+            TEST_CHECK( false );
+            return;
+        }
+
+        builder.AddTransaction( loaded.back()[ step.index ], step.mode );
+
+        if( !want.empty() )
+            want += "---\n";
+        want += ExpectedBlock( step.fixture, step.index );
+    }
+    builder.Finish();
+
+    MockBus bus;
+    bus.Build( builder );
+
+    espi_saleae::SamplingByteSource::Channels wired = bus.Wired();
+
+    // The analyzer is told Single and nothing else. Everything after the first
+    // chip select comes from what it decodes.
+    espi_saleae::SamplingByteSource source( wired, espi::IoMode::Single );
+    espi::LinkDecoder decoder( &source );
+    espi::SessionState session( espi::IoMode::Single );
+
+    std::string got;
+    for( size_t i = 0; i < sizeof( kSteps ) / sizeof( kSteps[ 0 ] ); ++i )
+    {
+        source.SetMode( session.Mode() );
+
+        if( !source.SyncToNextAssertion() )
+        {
+            std::fprintf( stderr, "FAIL  no CS# assertion for transaction %zu\n", i );
+            TEST_CHECK( false );
+            return;
+        }
+
+        espi::Transaction transaction;
+        if( !decoder.Decode( &transaction ) )
+        {
+            std::fprintf( stderr, "FAIL  transaction %zu produced nothing\n", i );
+            TEST_CHECK( false );
+            return;
+        }
+        session.Apply( transaction );
+
+        // The mode the session arrived at has to be the mode the waveform was
+        // actually laid down in for the NEXT transaction. Checked here as well
+        // as through the rendered text because the text of a garbled decode is
+        // long and says nothing about which step went wrong.
+        if( i + 1 < sizeof( kSteps ) / sizeof( kSteps[ 0 ] ) )
+            TEST_CHECK( session.Mode() == kSteps[ i + 1 ].mode );
+
+        if( i != 0 )
+            got += "---\n";
+        got += espi::Render( transaction );
+    }
+
+    if( got != want )
+        std::fprintf( stderr, "FAIL  mode switch decode differs\n--- expected ---\n%s--- got ---\n%s-----------\n",
+                      want.c_str(), got.c_str() );
+    TEST_CHECK( got == want );
+
+    // Single -> Quad -> Single. Rendered text cannot see this: a decoder handed
+    // the right mode from the start produces the same words.
+    TEST_CHECK_EQ( session.ModeChanges(), 2u );
+    TEST_CHECK( session.Mode() == espi::IoMode::Single );
+    TEST_CHECK( !session.CrcChecking() ); // the RESET turned it back off
+    TEST_CHECK( !session.Uncertain() );
 }
 
 // -------------------------------------------------------------------------
@@ -555,6 +719,7 @@ int main()
     TestFrameV2TypeNames();
     TestEveryFixtureThroughTheWaveform();
     TestDualAndQuadGeometry();
+    TestModeSwitchFollowedMidCapture();
     TestStopsAtChipSelect();
     TestResynchronisesFromMidTransaction();
     TestWorkerThreadEmitsFrames();

@@ -24,8 +24,12 @@ namespace espi_saleae
 //  espi::ConfigResetValue() in the core already establishes as Single I/O with
 //  CRC checking disabled; the setting exists for captures that begin later.
 //
-//  Following that switch mid-capture is phase 7. This setting is only the
-//  starting point.
+//  IT IS THE STARTING POINT AND NOTHING MORE. From the first chip select
+//  onward the wire decides: espi::SessionState follows an accepted write of
+//  008h and an In-band RESET, and EspiAnalyzer::WorkerThread hands the result
+//  to SamplingByteSource::SetMode() before each transaction. Leaving this at
+//  Single I/O for a capture that begins at reset is correct even if the link
+//  goes to Quad three transactions in.
 // ---------------------------------------------------------------------------
 
 class EspiAnalyzerSettings : public AnalyzerSettings

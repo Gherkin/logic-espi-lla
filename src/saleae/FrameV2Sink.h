@@ -47,6 +47,21 @@ struct TransactionSummary
     // already transcribed and QC'd, so this is not new vocabulary.
     std::string opcode;
 
+    // What this transaction does to the session, or empty for the great
+    // majority that do nothing.
+    //
+    // WHY IT IS HERE AND NOT ON A FIELD. The core puts the same statement in
+    // the decode tree as a Session block, but that block carries no sample span
+    // -- the bytes that caused it are already drawn as the Data field or as
+    // Register Reset -- so it draws no bubble and reaches no tabular row. This
+    // is a property of the whole chip select frame, which is exactly what this
+    // record already is.
+    //
+    // Without it the one thing phase 7 added is invisible on screen: the
+    // waveform after a switch is a quarter the width and still decodes, and
+    // nothing says why.
+    std::string session;
+
     bool truncated = false;
     bool error = false;
 };

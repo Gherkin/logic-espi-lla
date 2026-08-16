@@ -5,8 +5,25 @@
 #include "espi/Decode.h"
 #include "espi/IoMode.h"
 
+#include <string>
+
 namespace espi
 {
+
+// The mode's name, spelled as §6.2.1.3 p.95 spells the I/O Mode Select
+// encodings it decodes to. One copy, because both the decode tree and the
+// per-transaction summary below have to say it and two copies drift.
+const char* IoModeName( IoMode mode );
+
+// One line saying what a transaction does to the session, for a presentation
+// surface with a row per chip select rather than a row per field. Empty when
+// the transaction changes nothing, which is nearly all of them.
+//
+// The decode tree already carries this as a Session block, but that block has
+// no sample span -- the bytes behind it are drawn as the Data field or as
+// Register Reset -- so it reaches no bubble and no tabular row. This is the
+// same statement in the form a frame-level record can carry.
+std::string DescribeSessionUpdate( const SessionUpdate& update );
 
 // ---------------------------------------------------------------------------
 //  L3 -- session state.

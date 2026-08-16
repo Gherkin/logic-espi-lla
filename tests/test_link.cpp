@@ -2540,6 +2540,44 @@ void TestIoModeSelectEncodings()
     TEST_CHECK( IsGeneralConfigAddress( 0xF008 ) );
 }
 
+// The one-line summary a per-transaction presentation row carries. The decode
+// tree says the same thing at more length; this is what fits in a table cell,
+// and a shell reading it out of the rendered text instead is the coupling the
+// SessionUpdate struct exists to avoid.
+void TestSessionUpdateSummary()
+{
+    SessionUpdate quiet;
+    TEST_CHECK( DescribeSessionUpdate( quiet ).empty() );
+
+    SessionUpdate written;
+    written.change = SessionChange::GeneralConfigWritten;
+    written.config.mode = IoMode::Quad;
+    written.config.crc_checking = true;
+    TEST_CHECK( DescribeSessionUpdate( written ) == "Quad I/O, CRC checking enabled" );
+
+    // The mode is named even though nothing changed it, because the row says
+    // what is in force from here rather than what moved.
+    SessionUpdate reset;
+    reset.change = SessionChange::InbandReset;
+    reset.config.mode = IoMode::Single;
+    TEST_CHECK( DescribeSessionUpdate( reset ) == "Single I/O, CRC checking disabled" );
+
+    // A reserved selection names no mode, and the CRC half of the same DWord
+    // still lands.
+    SessionUpdate reserved;
+    reserved.change = SessionChange::GeneralConfigWritten;
+    reserved.config.mode_reserved = true;
+    reserved.config.crc_checking = true;
+    TEST_CHECK( DescribeSessionUpdate( reserved )
+                == "I/O mode unchanged, the selection is Reserved; CRC checking enabled" );
+
+    SessionUpdate uncertain;
+    uncertain.change = SessionChange::GeneralConfigUncertain;
+    TEST_CHECK( DescribeSessionUpdate( uncertain ).find( "uncertain" ) == 0 );
+
+    TEST_CHECK( std::string( IoModeName( IoMode::Dual ) ) == "Dual I/O" );
+}
+
 } // namespace
 
 int main()
@@ -2589,5 +2627,6 @@ int main()
     TestSessionFollowsInbandReset();
     TestSessionIgnoresOtherRegisters();
     TestIoModeSelectEncodings();
+    TestSessionUpdateSummary();
     TEST_MAIN_RETURN();
 }

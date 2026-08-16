@@ -47,6 +47,8 @@ void EmitTransactionV2( AnalyzerResults* results, const TransactionSummary& summ
     FrameV2 frame;
     if( !summary.opcode.empty() )
         frame.AddString( "opcode", summary.opcode.c_str() );
+    if( !summary.session.empty() )
+        frame.AddString( "session", summary.session.c_str() );
     frame.AddBoolean( "truncated", summary.truncated );
     frame.AddBoolean( "error", summary.error );
 

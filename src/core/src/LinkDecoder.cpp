@@ -6,6 +6,7 @@
 #include "espi/Opcodes.h"
 #include "espi/PacketShape.h"
 #include "espi/Responses.h"
+#include "espi/Session.h"
 #include "espi/Status.h"
 #include "espi/VirtualWires.h"
 
@@ -1599,20 +1600,6 @@ void DecodeTransaction( ByteSource* source, Transaction* out, PacketContext* con
 // from the packet without the specification open beside them.
 void AddSessionFields( Field* session, const GeneralConfig& config )
 {
-    const char* mode_name = nullptr;
-    switch( config.mode )
-    {
-    case IoMode::Single:
-        mode_name = "Single I/O";
-        break;
-    case IoMode::Dual:
-        mode_name = "Dual I/O";
-        break;
-    case IoMode::Quad:
-        mode_name = "Quad I/O";
-        break;
-    }
-
     Field mode( "I/O Mode", Hex( config.mode_encoding, 1 ), config.mode_encoding, 2, ByteSpan{} );
     if( config.mode_reserved )
     {
@@ -1624,7 +1611,7 @@ void AddSessionFields( Field* session, const GeneralConfig& config )
     }
     else
     {
-        mode.text += std::string( "  " ) + mode_name + ", from this chip select's deassertion edge";
+        mode.text += std::string( "  " ) + IoModeName( config.mode ) + ", from this chip select's deassertion edge";
     }
     session->Add( std::move( mode ) );
 

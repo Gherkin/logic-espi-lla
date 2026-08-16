@@ -427,11 +427,13 @@ void CheckSimulationDecodesAsTheScriptStates( espi::IoMode mode, int lanes, U32 
         }
     }
 
-    // The mode really moved, and moved back. Rendered text cannot see this:
-    // every transaction above decodes to the same words whichever geometry
-    // carried it, so an analyzer that ignored the switch entirely would be
-    // caught by the bytes it failed to recover, and one that was handed the
-    // right mode all along would not be caught at all.
+    // The mode really moved, and moved back.
+    //
+    // The text comparison above already catches an analyzer that fails to
+    // FOLLOW the switch -- it recovers garbage from the Quad transactions, and
+    // the RESET is the one decode whose text is mode dependent, so its byte
+    // count moves too. What no comparison of text can catch is an analyzer that
+    // was handed the right mode all along, which is what this distinguishes.
     //
     // At least twice because the run makes more than one pass: Single to Quad
     // at the SET_CONFIGURATION, Quad back to Single at the RESET that closes
@@ -529,6 +531,7 @@ void CheckWorkerThreadRunsOnItsOwnSimulation( espi::IoMode mode, U32 sample_rate
     // invents a name: the record carries what the core resolved and the
     // .expected file carries what a person read off Table 2.
     const std::vector<espi_saleae::SimTransaction>& script = bus.generator.Script();
+    const bool draws_excursion = ( mode == espi::IoMode::Single );
     const auto& recorded = espi_saleae::RecordedTransactionsV2();
     TEST_CHECK( recorded.size() > script.size() );
     TEST_CHECK_EQ( recorded.size(), (size_t)bus.generator.TransactionsEmitted() );
@@ -547,6 +550,36 @@ void CheckWorkerThreadRunsOnItsOwnSimulation( espi::IoMode mode, U32 sample_rate
             TEST_CHECK( false );
             return;
         }
+    }
+
+    // The session change reaches the frame-level record. This is the only
+    // surface in Logic 2 where it is visible at all: the decode tree's Session
+    // block carries no sample span, on purpose, so it draws no bubble and
+    // reaches no per-field row.
+    size_t to_quad = 0;
+    size_t to_single = 0;
+    for( const espi_saleae::TransactionSummary& t : recorded )
+    {
+        if( t.session.find( "Quad I/O" ) != std::string::npos )
+            ++to_quad;
+        if( t.session.find( "Single I/O" ) != std::string::npos )
+            ++to_single;
+    }
+
+    if( draws_excursion )
+    {
+        // The SET_CONFIGURATION says Quad; the RESET that closes the loop says
+        // Single. Both, or the demo shows a link that goes to Quad and never
+        // comes back.
+        TEST_CHECK( to_quad > 0 );
+        TEST_CHECK( to_single > 0 );
+    }
+    else
+    {
+        // Nothing in the eight capture transactions touches 008h, so every one
+        // of them has to leave this empty rather than restating the mode it
+        // happens to be running in.
+        TEST_CHECK_EQ( to_quad + to_single, size_t( 0 ) );
     }
 }
 

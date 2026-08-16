@@ -3,6 +3,43 @@
 namespace espi
 {
 
+const char* IoModeName( IoMode mode )
+{
+    switch( mode )
+    {
+    case IoMode::Single:
+        return "Single I/O";
+    case IoMode::Dual:
+        return "Dual I/O";
+    case IoMode::Quad:
+        return "Quad I/O";
+    }
+    return "";
+}
+
+std::string DescribeSessionUpdate( const SessionUpdate& update )
+{
+    switch( update.change )
+    {
+    case SessionChange::None:
+        break;
+
+    case SessionChange::GeneralConfigUncertain:
+        return "uncertain -- the write to General Capabilities and Configurations did not complete";
+
+    case SessionChange::GeneralConfigWritten:
+    case SessionChange::InbandReset:
+    {
+        const std::string crc =
+            update.config.crc_checking ? "CRC checking enabled" : "CRC checking disabled";
+        if( update.config.mode_reserved )
+            return "I/O mode unchanged, the selection is Reserved; " + crc;
+        return std::string( IoModeName( update.config.mode ) ) + ", " + crc;
+    }
+    }
+    return {};
+}
+
 SessionState::SessionState()
 {
     GeneralConfig reset;

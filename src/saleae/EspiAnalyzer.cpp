@@ -260,6 +260,10 @@ void EspiAnalyzer::WorkerThread()
         summary.error = transaction.HasError();
         if( const espi::Field* opcode = transaction.Find( "Opcode" ) )
             summary.opcode = opcode->text;
+
+        // Built from the structured update rather than scraped back out of the
+        // rendered tree, which is the whole reason Transaction carries one.
+        summary.session = espi::DescribeSessionUpdate( transaction.session );
         EmitTransactionV2( mResults.get(), summary );
 
         mResults->CommitPacketAndStartNewPacket();

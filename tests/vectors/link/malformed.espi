@@ -9,14 +9,23 @@ CMD 0C 00
 
 # 2. A defined opcode whose packet shape has not been transcribed yet. RESET
 #    is real (Table 2, p.27, "In-band RESET command") and is the last opcode
-#    with no transcribed shape -- the description is one line and no figure in
-#    the document draws the transaction. The decoder must say so rather than
-#    guess a length.
+#    with no transcribed shape. The decoder must say so rather than guess a
+#    length.
+#
+#    THE SPECIFICATION IS NOT SILENT ON IT, WHICH THIS COMMENT USED TO CLAIM.
+#    Section 8.3.2 on p.122 gives the whole transaction -- no CRC byte, no
+#    response phase, all I/O lines high for 16 eSPI clocks, tri-stated at the
+#    CS# deassertion edge -- and Figure 65 on p.123 draws it. Nothing in
+#    Table 2 points there, which is how it went unread. So this is a gap in
+#    our transcription and not in the document, and it stays a gap only until
+#    somebody transcribes it: see docs/HANDOFF.md, next item 1.
 #
 #    This case used to be PUT_OOB, which was the same situation until Figure 45
 #    was read. Kept pointed at whatever is still a gap, because the path it
 #    exercises is "a real opcode we have not finished" and that has to stay
-#    distinguishable from "not an opcode at all", which is case 1.
+#    distinguishable from "not an opcode at all", which is case 1. RESET is the
+#    last opcode in that category, so transcribing it leaves this case with no
+#    subject and something else has to take its place.
 CMD FF 00
 
 # 3. A good GET_CONFIGURATION command with one bit flipped in the CRC byte.

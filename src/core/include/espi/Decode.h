@@ -46,8 +46,29 @@ struct Field
     {
     }
 
+    // Adding a child widens this field's span to cover it.
+    //
+    // The span is what the shell turns into a Frame's start and end, so a
+    // container that claims fewer samples than the bytes it holds would draw
+    // the wrong bubble. Three containers were in that state -- Virtual Wire
+    // Packet, SMBus Packet and Message Code -- because each is constructed
+    // with its first byte's span and then has later bytes added to it.
+    //
+    // Done here rather than at each construction site because this is the only
+    // way a child is ever attached, so the invariant holds for containers
+    // nobody has written yet. Widening is a no-op for the common case where a
+    // child explains its parent's own bytes and carries the parent's span --
+    // status bits, register fields -- which is what keeps the shell's
+    // ChildrenAreSeparateBytes() test meaning the same thing as before.
+    //
+    // A child with no span of its own does not widen anything: WAIT_STATE runs
+    // and error fields are built with a default ByteSpan on purpose.
+    //
+    // tests/support/FieldInvariants.h checks the result on every fixture.
     Field& Add( Field child )
     {
+        if( child.span.last > child.span.first )
+            span = ( span.last > span.first ) ? Merge( span, child.span ) : child.span;
         children.push_back( std::move( child ) );
         return children.back();
     }

@@ -20,6 +20,7 @@
 #include "espi/Responses.h"
 #include "espi/Status.h"
 #include "espi/VirtualWires.h"
+#include "support/FieldInvariants.h"
 #include "support/FixtureByteSource.h"
 #include "support/TestMacros.h"
 
@@ -91,6 +92,11 @@ std::string DecodeFixture( const char* name, bool strict_consumption )
         if( i != 0 )
             out += "---\n";
         out += Render( txn );
+
+        // Checked on every fixture rather than in a test of its own: a span
+        // that does not cover its children is invisible to a text diff, so
+        // the only way to catch one is to look at every tree that goes past.
+        TEST_CHECK_EQ( espi_test::CheckSpanContainment( txn, name ), size_t( 0 ) );
 
         if( !strict_consumption )
             continue;
@@ -297,10 +303,18 @@ void TestFramingInvariant()
 // gap a gap instead of a guess, and the list shrinking is the progress marker:
 // stage D took the eight peripheral opcodes off it, leaving OOB, flash and
 // RESET for stage E.
+//
+// RESET is the last one on the list, and it is a gap in the transcription
+// rather than in the document: §8.3.2 p.122 and Figure 65 p.123 define the
+// whole transaction -- no CRC, no response phase, 16 clocks of all ones -- and
+// nothing in Table 2 points at them. Transcribing it means changing
+// PacketShape rather than adding a row, because TestFramingInvariant below
+// assumes every command phase ends in a CRC. docs/HANDOFF.md carries it as
+// next item 1.
 void TestUntranscribedShapesAreGaps()
 {
     const uint8_t no_shape[] = {
-        0xFF, // RESET -- Table 2 p.27 gives it one line and no figure
+        0xFF, // RESET -- §8.3.2 pp.122-123 read, not yet transcribed
     };
     for( uint8_t opcode : no_shape )
     {

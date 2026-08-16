@@ -59,3 +59,55 @@ bytes.
 Column layout is undocumented — eight signal columns under six headers. Only
 the timestamp, the trailing label and its parenthesised byte value are relied
 upon, and those are unambiguous.
+
+`tests/support/CaptureDump.h` reads it, and the only field it looks at is the
+label: `IDLE` closes a chip select frame, `TURN` splits the command phase from
+the response phase, an empty label closes the last frame, and anything else is
+one byte on the bus named by the export — `ADDR`, `CRC`, `STS`, `Data`,
+`Length`, `Index`, `RESP` or an opcode name.
+
+**Those names are kept, and they are the most valuable thing in the file.**
+They are another implementation's field-by-field reading of 732 bytes of real
+traffic. What matters is the direction they travel:
+
+- **Building** the fixture uses only CS# framing and the `TURN` row. The bytes
+  handed to the decoder are literal and in wire order with no label near them,
+  so nothing the other decoder thinks can steer ours.
+- **Comparing** afterwards uses everything, names included. An oracle somebody
+  else wrote is not a tautology — it is the only thing here that is not our own
+  reading of the specification handed back to us.
+
+`tests/test_capture.cpp` holds the correspondence between the two vocabularies
+(`kVocabulary`) and the one place they genuinely disagree
+(`IsKnownDisagreement`). A label not in the vocabulary fails the test rather
+than being skipped.
+
+Two things about the file are worth knowing before you edit anything near it:
+
+- **It opens mid-frame.** Chip select is already asserted on the export's first
+  row, at `-0.00012 ms`, so the first of the 62 frames is a fragment of a
+  transaction that began before the capture did. Its first byte is `FFh`.
+- **Its last row has no label at all** — just a timestamp, the signals, and an
+  empty field. Chip select reads deasserted there like it does on every `IDLE`
+  row, so it is taken as the end of the last frame. The parser accepts that on
+  the final row and nowhere else.
+
+## `espi_dump.expected`
+
+The decode of all 62 frames, in capture order, `---` between transactions —
+what T4 (`tests/test_capture.cpp`) diffs against.
+
+Written out longhand (rule R2). The capture holds only **14 distinct
+transactions**: 47 of the frames are the same `0030h` poll repeated, three more
+are that poll with `VWIRE_AVAIL` set, and the remaining twelve are one each. So
+the file is 14 hand-written blocks pasted into capture order, one block per
+frame, mapped by the frame's literal bytes. **Eight of the fourteen already
+back fixtures in `link/`**, across six files — `get_configuration`,
+`set_configuration`, `get_vwire` and `get_vwire_boot_done` carry one each,
+`config_oob_channel` and `get_vwire_platform_index` two each — and their blocks
+are those files' text.
+
+The six that are new here are the two `0020h` read-backs that show the virtual
+wire channel becoming enabled and then ready, the `0030h` poll in both its
+status variants, the final poll where the OOB channel reports ready, and the
+opening fragment.

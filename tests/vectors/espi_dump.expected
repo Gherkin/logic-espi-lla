@@ -1,0 +1,1225 @@
+Command
+  Opcode  0xFF  RESET
+  Packet Shape  no shape transcribed for RESET -- packet length unknown, decode stopped [ERROR]
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0020  Channel 1 Capabilities and Configurations
+  CRC  0xC8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000B00
+    Operating Maximum Virtual Wire Count  0  resolves to 1
+    Maximum Virtual Wire Count Supported  11  resolves to 12
+    Virtual Wire Channel Ready  0
+    Virtual Wire Channel Enable  0
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x91  ok
+---
+Command
+  Opcode  0x22  SET_CONFIGURATION
+  Address  0x0020  Channel 1 Capabilities and Configurations
+  Data  0x00070001
+    Operating Maximum Virtual Wire Count  7  resolves to 8
+    Maximum Virtual Wire Count Supported  0  resolves to 1
+    Virtual Wire Channel Ready  0
+    Virtual Wire Channel Enable  1
+  CRC  0x01  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0020  Channel 1 Capabilities and Configurations
+  CRC  0xC8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00070B01
+    Operating Maximum Virtual Wire Count  7  resolves to 8
+    Maximum Virtual Wire Count Supported  11  resolves to 12
+    Virtual Wire Channel Ready  0
+    Virtual Wire Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xDA  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0020  Channel 1 Capabilities and Configurations
+  CRC  0xC8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00070B03
+    Operating Maximum Virtual Wire Count  7  resolves to 8
+    Maximum Virtual Wire Count Supported  11  resolves to 12
+    Virtual Wire Channel Ready  1
+    Virtual Wire Channel Enable  1
+  Status  0x014F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    VWIRE_AVAIL  bit 6 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xD3  ok
+---
+Command
+  Opcode  0x05  GET_VWIRE
+  CRC  0x1B  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Virtual Wire Packet  1 group
+    Count  0x00  1 group
+    Index  0x05  System Event, target to controller
+    Data  0x88
+      TARGET_BOOT_LOAD_STATUS  bit 3 = 1  high
+      Masked  ERROR_NONFATAL, ERROR_FATAL, TARGET_BOOT_LOAD_DONE  valid bit clear, level not updated
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x9F  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000110
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  0
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xD2  ok
+---
+Command
+  Opcode  0x22  SET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  Data  0x00000101
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x0  Reserved
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  CRC  0x33  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x95  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x014F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    VWIRE_AVAIL  bit 6 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xA0  ok
+---
+Command
+  Opcode  0x05  GET_VWIRE
+  CRC  0x1B  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Virtual Wire Packet  1 group
+    Count  0x00  1 group
+    Index  0x05  System Event, target to controller
+    Data  0x19
+      TARGET_BOOT_LOAD_DONE  bit 0 = 1  high, asserted
+      Masked  TARGET_BOOT_LOAD_STATUS, ERROR_NONFATAL, ERROR_FATAL  valid bit clear, level not updated
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0x5D  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x014F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    VWIRE_AVAIL  bit 6 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xA0  ok
+---
+Command
+  Opcode  0x05  GET_VWIRE
+  CRC  0x1B  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Virtual Wire Packet  1 group
+    Count  0x00  1 group
+    Index  0x40  Platform specific
+    Data  0x11
+      Virtual Wire Layout  Platform specific -- the base specification defines no wires for this index [!]
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xD9  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x014F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    VWIRE_AVAIL  bit 6 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xA0  ok
+---
+Command
+  Opcode  0x05  GET_VWIRE
+  CRC  0x1B  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Virtual Wire Packet  1 group
+    Count  0x00  1 group
+    Index  0x40  Platform specific
+    Data  0x10
+      Virtual Wire Layout  Platform specific -- the base specification defines no wires for this index [!]
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xB2  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000111
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  0
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xFB  ok
+---
+Command
+  Opcode  0x21  GET_CONFIGURATION
+  Address  0x0030  Channel 2 Capabilities and Configurations
+  CRC  0xB8  ok
+TAR  2 clocks
+Response
+  Response  0x08  ACCEPT
+  Data  0x00000113
+    OOB Message Channel Maximum Payload Size Selected  0x1  64 bytes
+    OOB Message Channel Maximum Payload Size Supported  0x1  64 bytes
+    OOB Message Channel Ready  1
+    OOB Message Channel Enable  1
+  Status  0x010F
+    PC_FREE  bit 0 = 1
+    NP_FREE  bit 1 = 1
+    VWIRE_FREE  bit 2 = 1
+    OOB_FREE  bit 3 = 1
+    FLASH_C_FREE  bit 8 = 1
+  CRC  0xA9  ok

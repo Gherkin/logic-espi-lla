@@ -174,7 +174,7 @@ U32 EspiAnalyzer::GenerateSimulationData( U64 newest_sample_requested, U32 sampl
     // GetSimulationSampleRate() is the rate Logic 2 will read the transitions
     // back at, which is not necessarily the device rate passed in beside it.
     // The generator holds both and converts.
-    if( !mSimulation.Initialized() )
+    if( !mSimulation.Ready() )
         mSimulation.Initialize( GetSimulationSampleRate(), mSettings.get() );
 
     return mSimulation.GenerateSimulationData( newest_sample_requested, sample_rate, simulation_channels );

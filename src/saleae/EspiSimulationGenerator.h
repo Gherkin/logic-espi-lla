@@ -66,11 +66,17 @@ namespace espi_saleae
 class EspiSimulationGenerator
 {
   public:
-    // Build the channels. Safe to call once; the analyzer does so on the first
-    // simulation request, as the SDK's own samples do.
+    // Build the channels. The analyzer calls this on the first simulation
+    // request, as the SDK's own samples do.
     void Initialize( U32 simulation_sample_rate, EspiAnalyzerSettings* settings );
 
-    bool Initialized() const { return mSettings != nullptr; }
+    // True once there are channels to draw on. A settings object with no
+    // channels assigned yet leaves this false and adds nothing, so calling
+    // Initialize again later is safe and is what the analyzer does -- a first
+    // simulation request can arrive before the dialog has been filled in.
+    // Calling it again after it HAS channels would append a second set, so the
+    // analyzer must keep asking this first.
+    bool Ready() const { return mCount != 0; }
 
     // Extend the waveform until it reaches newest_sample_requested, then hand
     // back the channel array.

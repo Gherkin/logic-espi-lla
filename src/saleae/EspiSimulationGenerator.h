@@ -103,6 +103,11 @@ class EspiSimulationGenerator
     // text noticing -- there is simply one block fewer to compare.
     U64 TransactionsEmitted() const { return mEmitted; }
 
+    // The script this run is actually replaying, which is not always the whole
+    // of SimulationScript() -- the mode excursion is dropped when the run
+    // cannot draw it. T3 needs the same list to know what to compare against.
+    const std::vector<SimTransaction>& Script() const { return mScript; }
+
   private:
     // Our own AdvanceAll: every channel moves together, so one cursor is
     // enough. See the note above on why the SDK's is not usable.
@@ -117,7 +122,12 @@ class EspiSimulationGenerator
     void EmitTransaction( const SimTransaction& transaction );
 
     EspiAnalyzerSettings* mSettings = nullptr;
+
+    // The mode the transaction being laid down is in, set from the script for
+    // each one. Seeded from the settings so Initialize can work out how many
+    // lanes the run needs before any transaction has been emitted.
     espi::IoMode mMode = espi::IoMode::Single;
+    std::vector<SimTransaction> mScript;
     U32 mSimulationRateHz = 0;
     U32 mHalfPeriod = 0;
     U64 mSample = 0;

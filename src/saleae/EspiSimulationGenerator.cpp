@@ -29,6 +29,14 @@ U32 HalfPeriodFor( U32 sample_rate )
     return rounded < 2 ? 2 : rounded;
 }
 
+// I/O channels a mode needs wired up. Single I/O is the odd one: it moves one
+// bit per clock but over two wires, because command and response are on
+// different lanes (Figure 56, p.88).
+int LanesFor( espi::IoMode mode )
+{
+    return mode == espi::IoMode::Single ? 2 : espi::BitsPerClock( mode );
+}
+
 } // namespace
 
 void EspiSimulationGenerator::Initialize( U32 simulation_sample_rate, EspiAnalyzerSettings* settings )
@@ -41,19 +49,32 @@ void EspiSimulationGenerator::Initialize( U32 simulation_sample_rate, EspiAnalyz
     mSimulationRateHz = simulation_sample_rate;
     mHalfPeriod = HalfPeriodFor( simulation_sample_rate );
 
-    // Single I/O needs I/O[1] as well as I/O[0]: the response phase is on a
-    // different wire from the command phase (Figure 56, p.88). Without every
-    // lane the mode uses there is no waveform to draw, so the generator stays
-    // empty and GenerateSimulationData reports no channels -- the same answer
-    // it gave before this phase existed, and an honest one.
-    const int lanes_needed = mMode == espi::IoMode::Single ? 2 : espi::BitsPerClock( mMode );
     if( settings->mChipSelect == UNDEFINED_CHANNEL || settings->mClock == UNDEFINED_CHANNEL )
         return;
-    for( int i = 0; i < lanes_needed; ++i )
+
+    // Lanes are assigned from I/O[0] up, so counting stops at the first gap.
+    int lanes_assigned = 0;
+    while( lanes_assigned < 4 && settings->mIo[ lanes_assigned ] != UNDEFINED_CHANNEL )
+        ++lanes_assigned;
+
+    // Which transactions this run can actually draw. The script decides, from
+    // the starting mode and the lanes available -- see SimulationScript.h.
+    mScript = SimulationScriptFrom( mMode, lanes_assigned );
+
+    // Single I/O needs I/O[1] as well as I/O[0]: the response phase is on a
+    // different wire from the command phase (Figure 56, p.88). Without every
+    // lane the script uses there is no waveform to draw, so the generator stays
+    // empty and GenerateSimulationData reports no channels -- the same answer
+    // it gave before this phase existed, and an honest one.
+    int lanes_needed = LanesFor( mMode );
+    for( const SimTransaction& entry : mScript )
     {
-        if( settings->mIo[ i ] == UNDEFINED_CHANNEL )
-            return;
+        const int needed = LanesFor( entry.mode );
+        if( needed > lanes_needed )
+            lanes_needed = needed;
     }
+    if( lanes_assigned < lanes_needed )
+        return;
 
     // Everything idles high except the clock: CS# is active low and the lanes
     // sit on their weak pull-ups.
@@ -137,6 +158,11 @@ void EspiSimulationGenerator::EmitIdleClocks( U32 count )
 
 void EspiSimulationGenerator::EmitTransaction( const SimTransaction& transaction )
 {
+    // The mode this one goes out in, taken from the script rather than worked
+    // out from the bytes about to be laid down. EmitByte and EmitClock read it
+    // for the lane packing.
+    mMode = transaction.mode;
+
     // Section 3, p.21: the clock is low at the assertion edge. It always is
     // here, because a clock period ends on the falling edge.
     SetLevel( mCs, false );
@@ -169,7 +195,7 @@ U32 EspiSimulationGenerator::GenerateSimulationData( U64 newest_sample_requested
     if( simulation_channels == nullptr || mCount == 0 )
         return 0;
 
-    const std::vector<SimTransaction>& script = SimulationScript();
+    const std::vector<SimTransaction>& script = mScript;
     if( !script.empty() )
     {
         // The request is in device samples and the waveform is in simulation

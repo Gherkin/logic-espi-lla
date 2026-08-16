@@ -29,6 +29,7 @@
 #include "espi/Decode.h"
 #include "espi/IoMode.h"
 #include "espi/LinkDecoder.h"
+#include "espi/Session.h"
 
 #include "EspiAnalyzerSettings.h"
 #include "EspiSimulationGenerator.h"
@@ -78,8 +79,10 @@ const U32 kSampleRate = 100 * 1000 * 1000;
 // suite reaches: T2's geometry is eight samples per clock throughout.
 const U32 kMarginalSampleRate = 24 * 1000 * 1000;
 
-// Enough for two and a half passes of the eight transaction script, so the
-// wrap back to the first transaction is exercised rather than assumed.
+// Enough for more than one pass of the script, so the wrap back to the first
+// transaction is exercised rather than assumed -- and, on the Single I/O run,
+// so the mode excursion is traversed whole rather than left half done at the
+// end of the waveform.
 const U64 kSimulatedSamples = 12000;
 
 Channel WireChannel( U32 index )
@@ -210,7 +213,11 @@ struct SimulatedBus
 };
 
 // Every transaction the simulated waveform carries, rendered.
-std::vector<std::string> DecodeEverything( espi_saleae::SamplingByteSource* source )
+//
+// The loop is EspiAnalyzer::WorkerThread's: the session decides what mode each
+// chip select is read in, and each decoded transaction is folded back into it
+// at the deassertion edge. Nothing here is told what the generator laid down.
+std::vector<std::string> DecodeEverything( espi_saleae::SamplingByteSource* source, espi::SessionState* session )
 {
     espi::LinkDecoder decoder( source );
     std::vector<std::string> rendered;
@@ -218,12 +225,15 @@ std::vector<std::string> DecodeEverything( espi_saleae::SamplingByteSource* sour
     {
         for( ;; )
         {
+            source->SetMode( session->Mode() );
+
             if( !source->SyncToNextAssertion() )
                 break;
 
             espi::Transaction transaction;
             if( !decoder.Decode( &transaction ) )
                 break;
+            session->Apply( transaction );
 
             rendered.push_back( espi::Render( transaction ) );
         }
@@ -366,9 +376,24 @@ void CheckSimulationDecodesAsTheScriptStates( espi::IoMode mode, int lanes, U32 
 
     espi_saleae::SamplingByteSource::Channels wired = bus.Wired();
     espi_saleae::SamplingByteSource source( wired, mode );
-    const std::vector<std::string> rendered = DecodeEverything( &source );
 
-    const std::vector<espi_saleae::SimTransaction>& script = espi_saleae::SimulationScript();
+    // The session is the analyzer's, not the generator's: it is told the
+    // starting mode and works the rest out from the SET_CONFIGURATION and the
+    // RESET it decodes. The generator was told every mode outright.
+    espi::SessionState session( mode );
+    const std::vector<std::string> rendered = DecodeEverything( &source, &session );
+
+    // What this run could actually draw, which is not always the whole script.
+    const std::vector<espi_saleae::SimTransaction>& script = bus.generator.Script();
+
+    // Which of the two it is, asserted rather than inferred from the run.
+    // Everything below compares rendered text against the script it was handed,
+    // so a filter that quietly dropped the excursion would leave every one of
+    // those comparisons passing -- on a shorter script, decoding a waveform
+    // that never changed mode. This is the only check that would notice.
+    const bool draws_excursion = ( mode == espi::IoMode::Single && lanes == 4 );
+    const size_t whole = espi_saleae::SimulationScript().size();
+    TEST_CHECK_EQ( script.size(), draws_excursion ? whole : whole - 3 );
 
     // Every transaction that was drawn has to come back out. Comparing the
     // rendered text alone cannot see a lost one -- there is simply one block
@@ -401,6 +426,20 @@ void CheckSimulationDecodesAsTheScriptStates( espi::IoMode mode, int lanes, U32 
             return;
         }
     }
+
+    // The mode really moved, and moved back. Rendered text cannot see this:
+    // every transaction above decodes to the same words whichever geometry
+    // carried it, so an analyzer that ignored the switch entirely would be
+    // caught by the bytes it failed to recover, and one that was handed the
+    // right mode all along would not be caught at all.
+    //
+    // At least twice because the run makes more than one pass: Single to Quad
+    // at the SET_CONFIGURATION, Quad back to Single at the RESET that closes
+    // the loop. Without the second the script would wrap into the wrong mode.
+    if( draws_excursion )
+        TEST_CHECK( session.ModeChanges() >= 2 );
+    else
+        TEST_CHECK_EQ( session.ModeChanges(), 0u );
 }
 
 void TestSimulationDecodesAsTheScriptStates()
@@ -489,7 +528,7 @@ void CheckWorkerThreadRunsOnItsOwnSimulation( espi::IoMode mode, U32 sample_rate
     // the human written decode of that transaction also names. Nothing here
     // invents a name: the record carries what the core resolved and the
     // .expected file carries what a person read off Table 2.
-    const std::vector<espi_saleae::SimTransaction>& script = espi_saleae::SimulationScript();
+    const std::vector<espi_saleae::SimTransaction>& script = bus.generator.Script();
     const auto& recorded = espi_saleae::RecordedTransactionsV2();
     TEST_CHECK( recorded.size() > script.size() );
     TEST_CHECK_EQ( recorded.size(), (size_t)bus.generator.TransactionsEmitted() );

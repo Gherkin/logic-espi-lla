@@ -3,6 +3,7 @@
 
 #include "EspiAnalyzerResults.h"
 #include "EspiAnalyzerSettings.h"
+#include "EspiSimulationGenerator.h"
 
 #include <Analyzer.h>
 
@@ -63,6 +64,11 @@ class EspiAnalyzer : public Analyzer2
 
     std::unique_ptr<EspiAnalyzerSettings> mSettings;
     std::unique_ptr<EspiAnalyzerResults> mResults;
+
+    // Demo mode. Built on the first request and kept afterwards: Logic 2 calls
+    // GenerateSimulationData over and over, each time asking for a later
+    // sample, and expects the same channels extended rather than new ones.
+    EspiSimulationGenerator mSimulation;
 };
 
 } // namespace espi_saleae

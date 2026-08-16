@@ -168,14 +168,16 @@ void EspiAnalyzer::WorkerThread()
     }
 }
 
-U32 EspiAnalyzer::GenerateSimulationData( U64 /*newest_sample_requested*/, U32 /*sample_rate*/,
-                                          SimulationChannelDescriptor** /*simulation_channels*/ )
+U32 EspiAnalyzer::GenerateSimulationData( U64 newest_sample_requested, U32 sample_rate,
+                                          SimulationChannelDescriptor** simulation_channels )
 {
-    // Phase 5. Returning zero channels is the honest answer until the
-    // generator exists -- and note that the SDK's own group API cannot be used
-    // to build one, because SimulationChannelDescriptorGroup::AdvanceAll() is
-    // an empty stub offline (docs/PLAN.md section 6, gotcha 1).
-    return 0;
+    // GetSimulationSampleRate() is the rate Logic 2 will read the transitions
+    // back at, which is not necessarily the device rate passed in beside it.
+    // The generator holds both and converts.
+    if( !mSimulation.Initialized() )
+        mSimulation.Initialize( GetSimulationSampleRate(), mSettings.get() );
+
+    return mSimulation.GenerateSimulationData( newest_sample_requested, sample_rate, simulation_channels );
 }
 
 U32 EspiAnalyzer::GetMinimumSampleRateHz()

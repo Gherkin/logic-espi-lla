@@ -51,6 +51,18 @@ if(ESPI_BUILD_PLUGIN)
     target_compile_definitions(test_sampling PRIVATE
         ESPI_VECTOR_DIR="${CMAKE_CURRENT_SOURCE_DIR}/vectors")
     add_test(NAME test_sampling COMMAND test_sampling)
+
+    # T3 -- the closed loop. Same shape as T2: the shell, the offline stubs,
+    # and the recording FrameV2 sink.
+    add_executable(test_simulation
+        test_simulation.cpp
+        ${CMAKE_SOURCE_DIR}/src/saleae/FrameV2SinkRecording.cpp
+    )
+    target_link_libraries(test_simulation PRIVATE espi_shell espi_test_harness)
+    target_include_directories(test_simulation PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_definitions(test_simulation PRIVATE
+        ESPI_VECTOR_DIR="${CMAKE_CURRENT_SOURCE_DIR}/vectors")
+    add_test(NAME test_simulation COMMAND test_simulation)
 endif()
 
 # ---------------------------------------------------------------------------

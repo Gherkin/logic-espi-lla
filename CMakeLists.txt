@@ -74,6 +74,8 @@ if(ESPI_BUILD_PLUGIN)
         src/saleae/SamplingByteSource.cpp
         src/saleae/EspiAnalyzerSettings.cpp
         src/saleae/EspiAnalyzerResults.cpp
+        src/saleae/SimulationScript.cpp
+        src/saleae/EspiSimulationGenerator.cpp
         src/saleae/EspiAnalyzer.cpp
     )
 

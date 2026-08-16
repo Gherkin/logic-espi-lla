@@ -30,12 +30,34 @@ enum class Severity : uint8_t
 //  shell's only job is turning this into Frames and FrameV2 key/values.
 // ---------------------------------------------------------------------------
 
+// Whether a field carries a value or explains one.
+//
+// Almost every field has a `raw` worth showing. A few do not: the "Masked" note
+// on a virtual wire packet lists the wires whose valid bit is clear, and is
+// built with a raw of 0 because there is no value to carry. A reader cannot
+// tell the two apart from the outside, and a presentation layer that guesses
+// prints "Masked=0" beside "TARGET_BOOT_LOAD_STATUS=high" as though both were
+// wire states.
+enum class FieldKind : uint8_t
+{
+    Value,
+    Note,
+};
+
 struct Field
 {
     std::string name;       // "Index", "SLAVE_BOOT_LOAD_STATUS", "CRC"
-    std::string text;       // formatted for humans: "0x05", "64 bytes", "valid"
+
+    // Formatted for humans, as "<value>  <meaning>" -- two spaces, either half
+    // may be absent: "0x05  GET_VWIRE", "0x88", "2 clocks". Render() prepends
+    // the name and nothing else, so this is the whole of a decoded line, and
+    // the split is the only thing a bubble has to work with when it needs to
+    // show the meaning without the number.
+    std::string text;
+
     uint64_t raw = 0;       // the underlying value
     uint8_t bit_width = 8;  // significant bits in `raw`, for formatting
+    FieldKind kind = FieldKind::Value;
     Severity severity = Severity::Info;
     ByteSpan span{};
     std::vector<Field> children;

@@ -411,11 +411,65 @@ void TestWorkerThreadEmitsFrames()
         TEST_CHECK( !recorded[ 0 ].error );
     }
 
-    // Bubble text has to come back out for the frames that went in.
-    instance.GenerateBubbleText( 0, wired[ kChanIo0 ], Hexadecimal );
-    TEST_CHECK( results->TotalStringCount() > 0 );
-    if( results->TotalStringCount() > 0 )
-        TEST_CHECK( !results->GetString( 0 ).empty() );
+    // ---------------------------------------------------------------------
+    //  Bubble text, at every width Logic 2 might draw it.
+    //
+    //  Logic 2 picks the LONGEST string that fits, so what matters is not one
+    //  string but the set: is there something worth reading at each width. The
+    //  frame order is the one kExpectedTypes states below.
+    // ---------------------------------------------------------------------
+    auto strings_for = [ & ]( U64 frame ) {
+        instance.GenerateBubbleText( frame, wired[ kChanIo0 ], Hexadecimal );
+        std::vector<std::string> out;
+        for( U64 i = 0; i < results->TotalStringCount(); ++i )
+            out.push_back( results->GetString( i ) );
+        return out;
+    };
+
+    auto contains = []( const std::vector<std::string>& strings, const std::string& wanted ) {
+        for( const std::string& s : strings )
+        {
+            if( s == wanted )
+                return true;
+        }
+        return false;
+    };
+
+    auto contains_substring = []( const std::vector<std::string>& strings, const std::string& wanted ) {
+        for( const std::string& s : strings )
+        {
+            if( s.find( wanted ) != std::string::npos )
+                return true;
+        }
+        return false;
+    };
+
+    // The opcode: the resolved name on its own is offered, so a bubble with
+    // room for nine characters shows what the byte MEANS rather than what it
+    // was. Both are there; Logic 2 takes the longest that fits.
+    const std::vector<std::string> opcode_strings = strings_for( 0 );
+    TEST_CHECK( contains( opcode_strings, "GET_VWIRE" ) );
+    TEST_CHECK( contains( opcode_strings, "0x05" ) );
+
+    // The turn-around has no value, only a width -- its raw is 0 and means
+    // nothing. Offering "0x00" would put that in the narrowest bubbles, where
+    // it would be the only rung that fits.
+    const std::vector<std::string> tar_strings = strings_for( 2 );
+    TEST_CHECK( contains( tar_strings, "2 clocks" ) );
+    TEST_CHECK( !contains( tar_strings, "0x00" ) );
+
+    // The virtual wire data byte: the compressed form of its children sits
+    // between the bare value and the full sentence, which is the rung a wide
+    // bubble can actually show.
+    const std::vector<std::string> data_strings = strings_for( 6 );
+    TEST_CHECK( contains( data_strings, "0x88" ) );
+    TEST_CHECK( contains_substring( data_strings, "TARGET_BOOT_LOAD_STATUS=high" ) );
+    TEST_CHECK( contains_substring( data_strings, "valid bit clear, level not updated" ) );
+
+    // And the note about masked wires is not compressed into a value it does
+    // not have -- FieldKind::Note exists to stop "Masked=0" appearing beside a
+    // real wire state.
+    TEST_CHECK( !contains_substring( data_strings, "Masked=" ) );
 
     // ---------------------------------------------------------------------
     //  The FrameV2 type names, which docs/PLAN.md section 10 calls the

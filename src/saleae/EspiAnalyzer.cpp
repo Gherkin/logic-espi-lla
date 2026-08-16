@@ -1,5 +1,6 @@
 #include "EspiAnalyzer.h"
 
+#include "DecodedText.h"
 #include "FrameV2Sink.h"
 #include "SamplingByteSource.h"
 
@@ -35,24 +36,60 @@ bool Emittable( const espi::ByteSpan& span )
     return span.last > span.first;
 }
 
-// A field's explanatory children on one line, so nothing the decoder worked out
-// is lost just because it did not earn its own frame.
+// A field's explanatory children in full, on one line, so nothing the decoder
+// worked out is lost just because it did not earn its own frame.
 //
 // Kept separate from the field's own text rather than concatenated onto it:
-// they are shown at different bubble widths, and the structured form of the
-// same thing goes out as a FrameV2 "detail" key.
+// they are shown at different bubble widths.
 std::string Explanations( const espi::Field& field )
 {
     std::string text;
     for( const espi::Field& child : field.children )
     {
-        text += "; ";
+        if( !text.empty() )
+            text += "; ";
         text += child.name;
         if( !child.text.empty() )
         {
             text += ' ';
             text += child.text;
         }
+    }
+    return text;
+}
+
+// The same children, compressed to what they resolved to.
+//
+// The full form is accurate and long: a virtual wire packet spells out every
+// masked wire and why it is masked, which is worth having and does not fit in a
+// bubble. This is the rung between that and nothing at all --
+// "TARGET_BOOT_LOAD_STATUS=high" rather than a sentence about the three wires
+// whose valid bits are clear.
+//
+// Notes are left out: they explain their parent rather than resolving to
+// anything, so there is no "=" to write (Decode.h, FieldKind).
+std::string CompactExplanations( const espi::Field& field )
+{
+    std::string text;
+    for( const espi::Field& child : field.children )
+    {
+        if( child.kind == espi::FieldKind::Note )
+            continue;
+
+        // Comma separated, because the names have spaces in them: "Virtual
+        // Wire Channel Ready=0 Virtual Wire Channel Enable=0" does not show
+        // where one ends and the next begins.
+        if( !text.empty() )
+            text += ", ";
+        text += child.name;
+        text += '=';
+
+        // What it resolved to, or the value itself when the decoder had nothing
+        // to resolve it to. A status bit's text is "bit 0 = 1" with no meaning
+        // half, and "PC_FREE=1" is the useful compression of that, so the raw
+        // is better here than any part of the string.
+        const std::string meaning = MeaningOf( child.text );
+        text += meaning.empty() ? std::to_string( child.raw ) : meaning;
     }
     return text;
 }
@@ -146,7 +183,7 @@ void EspiAnalyzer::EmitField( const espi::Field& field, U64* previous_end )
     frame.mFlags = FlagsFor( field.severity );
 
     const std::string detail = Explanations( field );
-    mResults->AddDecodedField( frame, field.name, field.text, detail );
+    mResults->AddDecodedField( frame, field.name, field.text, CompactExplanations( field ), detail );
 
     // The same field again, structured, for the tabular view and protocol
     // search. Both surfaces are fed from one walk so they cannot disagree about

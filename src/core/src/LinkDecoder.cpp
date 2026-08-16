@@ -33,6 +33,16 @@ std::string Plural( unsigned count, const char* noun )
     return buf;
 }
 
+// A child that explains its parent rather than carrying a value of its own.
+// Its raw is 0 because there is nothing to put there, and FieldKind::Note is
+// what stops a reader treating that 0 as a decoded state -- see Decode.h.
+Field Note( const char* name, std::string text, ByteSpan span )
+{
+    Field field( name, std::move( text ), 0, 8, span );
+    field.kind = FieldKind::Note;
+    return field;
+}
+
 std::string BitText( unsigned bit, unsigned value )
 {
     char buf[ 32 ];
@@ -438,7 +448,7 @@ void AddNamedWireChildren( Field* data, uint8_t index, uint8_t value )
     }
 
     if( !masked.empty() )
-        data->Add( Field( "Masked", masked + "  valid bit clear, level not updated", 0, 8, data->span ) );
+        data->Add( Note( "Masked", masked + "  valid bit clear, level not updated", data->span ) );
 
     const uint8_t reserved = static_cast<uint8_t>( value & reserved_mask );
     if( reserved != 0 )
@@ -476,7 +486,7 @@ void AddUnnamedWireChildren( Field* data, uint8_t value )
     }
 
     if( !masked.empty() )
-        data->Add( Field( "Masked", masked + "  valid bit clear, level not updated", 0, 8, data->span ) );
+        data->Add( Note( "Masked", masked + "  valid bit clear, level not updated", data->span ) );
 }
 
 // Resolve one index/data pair into named wires, or say why it cannot be.
@@ -704,7 +714,7 @@ void AddMessageSpecific( Field* parent, uint8_t code, const uint8_t bytes[ 4 ], 
         // Table 7: the remaining fields are only valid when RQ is set. Naming
         // them without their values is the honest rendering, the same way a
         // virtual wire under a clear valid bit is named but not read.
-        parent->Add( Field( "Masked", "Latency Scale, Latency Value  requirement bit clear, fields not valid", 0, 8, span ) );
+        parent->Add( Note( "Masked", "Latency Scale, Latency Value  requirement bit clear, fields not valid", span ) );
     }
 
     if( ltr.reserved != 0 )

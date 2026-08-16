@@ -18,6 +18,7 @@
 #include "espi/LinkDecoder.h"
 #include "espi/PacketShape.h"
 #include "espi/Responses.h"
+#include "espi/Session.h"
 #include "espi/Status.h"
 #include "espi/VirtualWires.h"
 #include "support/FieldInvariants.h"
@@ -179,6 +180,12 @@ void TestGeneralCapabilities()
     // decoded every real transaction correctly. The mutation runner found that
     // gap; this fixture closes it.
     CheckAgainstExpected( "config_vwire_max.espi", "config_vwire_max.expected", true );
+
+    // The same register WRITTEN rather than read, which is the only thing that
+    // changes how later transactions are decoded. Three endings: accepted,
+    // answered with an error, and accepted while selecting the encoding p.95
+    // reserves.
+    CheckAgainstExpected( "set_configuration_io_mode.espi", "set_configuration_io_mode.expected", true );
 }
 
 // The response modifier decides how many bytes the response phase holds, so a
@@ -2023,7 +2030,7 @@ Corpus Load()
         "cycle_type_coverage.expected",      "put_oob_smbus.expected",
         "get_oob_mctp.expected",             "flash_controller_attached.expected",
         "flash_target_attached.expected",    "flash_rpmc.expected",
-        "reset.expected",
+        "reset.expected",                    "set_configuration_io_mode.expected",
     };
 
     Corpus c;
@@ -2281,6 +2288,258 @@ void TestTargetEraseBlockField()
         TEST_CHECK( !IsTargetEraseBlockField( 0x040, fields[ i ] ) );
 }
 
+// --- L3, the session state machine ---------------------------------------
+
+// Decode a fixture's transactions in order with the session state deciding
+// what mode each one is read in, and hand back the state afterwards. This is
+// the loop the analyzer runs between chip selects.
+//
+// AT T1 THIS CONSTRAINS THE STATE MACHINE AND NOTHING ELSE. A fixture is
+// bytes, and the bytes are the same bytes whatever mode carried them, so
+// nothing here would notice a mode applied to the wrong transaction or not
+// applied at all. tests/test_sampling.cpp is where that becomes observable,
+// because there the mode decides how many clocks a byte occupies and a
+// mistimed switch recovers no bytes at all.
+SessionState RunSession( const char* fixture, SessionState session )
+{
+    std::vector<Frame> frames;
+    std::string error;
+    if( !espi_test::LoadFixture( VectorPath( fixture ), &frames, &error ) )
+    {
+        std::fprintf( stderr, "FAIL  %s\n", error.c_str() );
+        TEST_CHECK( false );
+        return session;
+    }
+
+    for( const Frame& frame : frames )
+    {
+        FixtureByteSource source( frame, session.Mode() );
+        LinkDecoder decoder( &source );
+        Transaction txn;
+        TEST_CHECK( decoder.Decode( &txn ) );
+        session.Apply( txn );
+    }
+    return session;
+}
+
+// Where a capture that starts at eSPI Reset# starts, taken from the Default
+// column rather than from anything on the wire -- §5.1, p.86: "By default,
+// coming out of eSPI Reset#, both controller and target operate in Single I/O
+// mode", and §5.2, p.90: "CRC checking is default disabled after eSPI reset#".
+void TestSessionStartsAtTheResetDefaults()
+{
+    const SessionState fresh;
+    TEST_CHECK( fresh.Mode() == IoMode::Single );
+    TEST_CHECK( !fresh.CrcChecking() );
+    TEST_CHECK( !fresh.Uncertain() );
+    TEST_CHECK_EQ( fresh.ModeChanges(), 0u );
+
+    // A capture that opens mid-session is the one case the wire cannot settle,
+    // so the starting mode is a parameter. CRC checking still starts off: it
+    // changes no packet length, so a wrong guess costs a verdict rather than a
+    // decode.
+    const SessionState resumed( IoMode::Quad );
+    TEST_CHECK( resumed.Mode() == IoMode::Quad );
+    TEST_CHECK( !resumed.CrcChecking() );
+}
+
+// The three endings of a write to General Capabilities and Configurations,
+// walked in the order set_configuration_io_mode.espi has them.
+void TestSessionFollowsGeneralConfigWrites()
+{
+    std::vector<Frame> frames;
+    std::string error;
+    TEST_CHECK( espi_test::LoadFixture( VectorPath( "set_configuration_io_mode.espi" ), &frames, &error ) );
+    TEST_CHECK_EQ( frames.size(), size_t( 4 ) );
+    if( frames.size() != 4 )
+        return;
+
+    SessionState session;
+
+    // 1. ACCEPTed. Quad I/O and CRC checking from the deassertion edge -- and
+    //    the transaction that said so was itself read in Single I/O, which is
+    //    what §5.1 p.86 requires: "The SET_CONFIGURATION is completed with the
+    //    current mode of operation."
+    {
+        FixtureByteSource source( frames[ 0 ], session.Mode() );
+        TEST_CHECK( source.Mode() == IoMode::Single );
+        LinkDecoder decoder( &source );
+        Transaction txn;
+        TEST_CHECK( decoder.Decode( &txn ) );
+        TEST_CHECK( txn.session.change == SessionChange::GeneralConfigWritten );
+        session.Apply( txn );
+    }
+    TEST_CHECK( session.Mode() == IoMode::Quad );
+    TEST_CHECK( session.CrcChecking() );
+    TEST_CHECK( !session.Uncertain() );
+    TEST_CHECK_EQ( session.ModeChanges(), 1u );
+
+    // 2. Answered NON_FATAL_ERROR. §8.3.2, p.122, does not say the old
+    //    settings survive -- it says the state of the settings is uncertain,
+    //    which is a different and weaker claim. Carrying on in Quad is the only
+    //    thing available; the flag is what stops that being mistaken for
+    //    knowledge.
+    {
+        FixtureByteSource source( frames[ 1 ], session.Mode() );
+        LinkDecoder decoder( &source );
+        Transaction txn;
+        TEST_CHECK( decoder.Decode( &txn ) );
+        TEST_CHECK( txn.session.change == SessionChange::GeneralConfigUncertain );
+        session.Apply( txn );
+    }
+    TEST_CHECK( session.Uncertain() );
+    TEST_CHECK( session.Mode() == IoMode::Quad );
+    TEST_CHECK( session.CrcChecking() );
+    TEST_CHECK_EQ( session.ModeChanges(), 1u );
+
+    // 3. ACCEPTed, selecting Dual, with CRC checking turned back off. A write
+    //    that completed re-establishes the register whole, so the earlier
+    //    uncertainty is over.
+    {
+        FixtureByteSource source( frames[ 2 ], session.Mode() );
+        TEST_CHECK( source.Mode() == IoMode::Quad );
+        LinkDecoder decoder( &source );
+        Transaction txn;
+        TEST_CHECK( decoder.Decode( &txn ) );
+        TEST_CHECK( txn.session.change == SessionChange::GeneralConfigWritten );
+        session.Apply( txn );
+    }
+    TEST_CHECK( session.Mode() == IoMode::Dual );
+    TEST_CHECK( !session.CrcChecking() );
+    TEST_CHECK( !session.Uncertain() );
+    TEST_CHECK_EQ( session.ModeChanges(), 2u );
+
+    // 4. ACCEPTed, selecting the encoding p.95 reserves. The mode stays where
+    //    it was because 11b names none -- but the CRC Checking Enable bit in
+    //    the same DWord is not reserved and would have taken effect, so the
+    //    two are not one decision.
+    {
+        FixtureByteSource source( frames[ 3 ], session.Mode() );
+        LinkDecoder decoder( &source );
+        Transaction txn;
+        TEST_CHECK( decoder.Decode( &txn ) );
+        TEST_CHECK( txn.session.change == SessionChange::GeneralConfigWritten );
+        TEST_CHECK( txn.session.config.mode_reserved );
+        session.Apply( txn );
+    }
+    TEST_CHECK( session.Mode() == IoMode::Dual );
+    TEST_CHECK( !session.CrcChecking() );
+    TEST_CHECK_EQ( session.ModeChanges(), 2u );
+}
+
+// An In-band RESET returns 008h-00Bh to its default (§8.3.2, p.123), so a link
+// running in Quad with CRC checking on goes back to Single with it off.
+void TestSessionFollowsInbandReset()
+{
+    SessionState session = RunSession( "set_configuration_io_mode.espi", SessionState() );
+    TEST_CHECK( session.Mode() == IoMode::Dual );
+
+    // reset.espi holds two RESETs, so this also checks that a second one
+    // changes nothing further.
+    session = RunSession( "reset.espi", session );
+    TEST_CHECK( session.Mode() == IoMode::Single );
+    TEST_CHECK( !session.CrcChecking() );
+    TEST_CHECK( !session.Uncertain() );
+    TEST_CHECK_EQ( session.ModeChanges(), 3u ); // Single -> Quad -> Dual -> Single
+
+    // And it recovers the uncertain state, which is what §8.3.2 offers it for.
+    SessionState broken;
+    Transaction uncertain;
+    uncertain.session.change = SessionChange::GeneralConfigUncertain;
+    broken.Apply( uncertain );
+    TEST_CHECK( broken.Uncertain() );
+    broken = RunSession( "reset.espi", broken );
+    TEST_CHECK( !broken.Uncertain() );
+}
+
+// Every other register leaves the session alone. set_configuration.espi writes
+// 0020h, the virtual wire channel's register, and is the transaction the
+// capture actually contains.
+void TestSessionIgnoresOtherRegisters()
+{
+    const SessionState session = RunSession( "set_configuration.espi", SessionState( IoMode::Dual ) );
+    TEST_CHECK( session.Mode() == IoMode::Dual );
+    TEST_CHECK( !session.CrcChecking() );
+    TEST_CHECK_EQ( session.ModeChanges(), 0u );
+
+    // A read of 008h is not a write of it either, however much of the register
+    // its response carries. config_general.espi is a GET_CONFIGURATION whose
+    // DWord selects Dual I/O and enables CRC checking; acting on that would be
+    // reporting what the target already believes as though it were a change.
+    const SessionState after_read = RunSession( "config_general.espi", SessionState() );
+    TEST_CHECK( after_read.Mode() == IoMode::Single );
+    TEST_CHECK( !after_read.CrcChecking() );
+    TEST_CHECK_EQ( after_read.ModeChanges(), 0u );
+}
+
+// The I/O Mode Select encodings of p.95, checked against the two things the
+// core does with them: the text it prints and the mode it switches to.
+//
+// The header carries that table twice -- once as display text, once as an
+// espi::IoMode -- and this is what stops the two drifting apart. The strings
+// below were typed from the rendered page, not from the header (R2).
+void TestIoModeSelectEncodings()
+{
+    struct Row
+    {
+        uint32_t encoding;
+        const char* text;
+        IoMode mode;
+        bool reserved;
+    };
+    static const Row kRows[] = {
+        { 0x0, "Single I/O", IoMode::Single, false },
+        { 0x1, "Dual I/O", IoMode::Dual, false },
+        { 0x2, "Quad I/O", IoMode::Quad, false },
+        { 0x3, "Reserved", IoMode::Single, true },
+    };
+
+    for( const Row& row : kRows )
+    {
+        const uint32_t value = row.encoding << 26;
+
+        GeneralConfig config;
+        TEST_CHECK( DecodeGeneralConfig( 0x008, value, &config ) );
+        TEST_CHECK_EQ( config.mode_encoding, row.encoding );
+        TEST_CHECK_EQ( config.mode_reserved ? 1u : 0u, row.reserved ? 1u : 0u );
+        if( !row.reserved )
+            TEST_CHECK( config.mode == row.mode );
+
+        // The same encoding as the field table renders it.
+        ConfigField fields[ 16 ];
+        const size_t count = DecodeConfigRegister( 0x008, value, fields, 16 );
+        bool found = false;
+        for( size_t i = 0; i < count && i < 16; ++i )
+        {
+            if( fields[ i ].high != 27 || fields[ i ].low != 26 )
+                continue;
+            found = true;
+            TEST_CHECK( fields[ i ].meaning != nullptr && std::string( fields[ i ].meaning ) == row.text );
+        }
+        TEST_CHECK( found );
+    }
+
+    // CRC Checking Enable is the other half of the same DWord and is read from
+    // bit 31 -- the top bit, which is where an off-by-one in the extraction
+    // would show first.
+    GeneralConfig config;
+    TEST_CHECK( DecodeGeneralConfig( 0x008, 0x80000000u, &config ) );
+    TEST_CHECK( config.crc_checking );
+    TEST_CHECK( DecodeGeneralConfig( 0x008, 0x7FFFFFFFu, &config ) );
+    TEST_CHECK( !config.crc_checking );
+
+    // No other register carries these two fields, whatever its DWord holds.
+    TEST_CHECK( IsGeneralConfigAddress( 0x008 ) );
+    TEST_CHECK( !IsGeneralConfigAddress( 0x010 ) );
+    TEST_CHECK( !DecodeGeneralConfig( 0x010, 0x8C000000u, &config ) );
+
+    // An address with the top four bits set still reaches this register --
+    // §3.7, p.38, has the target ignore them -- so the bus really does change
+    // mode and the session has to follow it. The malformed address is reported
+    // separately, on the Address field.
+    TEST_CHECK( IsGeneralConfigAddress( 0xF008 ) );
+}
+
 } // namespace
 
 int main()
@@ -2325,5 +2584,10 @@ int main()
     TestEveryOpcodeHasAShape();
     TestResponseEncodings();
     TestStatusBits();
+    TestSessionStartsAtTheResetDefaults();
+    TestSessionFollowsGeneralConfigWrites();
+    TestSessionFollowsInbandReset();
+    TestSessionIgnoresOtherRegisters();
+    TestIoModeSelectEncodings();
     TEST_MAIN_RETURN();
 }

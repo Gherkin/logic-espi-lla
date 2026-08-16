@@ -1228,6 +1228,41 @@
       "find": "#define ESPI_TARGET_ERASE_BLOCK_RESERVED_MASK 0x1Bu",
       "replace": "#define ESPI_TARGET_ERASE_BLOCK_RESERVED_MASK 0x03u",
       "tests": "test_link"
+    },
+    {
+      "label": "session: a Quad I/O selection switches the bus to Dual",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x2, Quad, false )",
+      "replace": "X( 0x2, Dual, false )",
+      "tests": "test_link"
+    },
+    {
+      "label": "session: a Dual I/O selection switches the bus to Single",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x1, Dual, false )",
+      "replace": "X( 0x1, Single, false )",
+      "tests": "test_link"
+    },
+    {
+      "label": "session: the Reserved I/O mode encoding is treated as a mode",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x3, Single, true )",
+      "replace": "X( 0x3, Single, false )",
+      "tests": "test_link"
+    },
+    {
+      "label": "session: General Capabilities recognised at the wrong offset",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "#define ESPI_GENERAL_CONFIG_OFFSET 0x008u",
+      "replace": "#define ESPI_GENERAL_CONFIG_OFFSET 0x018u",
+      "tests": "test_link"
+    },
+    {
+      "label": "session: I/O Mode Select read from the I/O Mode Support bits",
+      "file": "src/core/tables/ConfigRegisters.h",
+      "find": "X( 0x008, 27, 26, \"I/O Mode Select\", IoModeSelect, false, RW, Value, 0 )",
+      "replace": "X( 0x008, 25, 24, \"I/O Mode Select\", IoModeSelect, false, RW, Value, 0 )",
+      "tests": "test_link"
     }
   ]
 }

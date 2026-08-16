@@ -210,6 +210,26 @@ struct PacketContext
     // been transcribed, and reporting the second as the first would blame the
     // bus for the analyzer's own limits.
     bool stopped = false;
+
+    // --- what this transaction does to the session, Decode.h SessionUpdate ---
+
+    // The command phase wrote a DWord to General Capabilities and
+    // Configurations. Recognised by SHAPE rather than by opcode: an Addr16
+    // followed by a Data32 in the *command* phase is a configuration write,
+    // and GET_CONFIGURATION is the same two elements with the Data32 in the
+    // response phase instead. Nothing here has to know 22h.
+    bool general_config_write = false;
+    GeneralConfig general_config{};
+
+    // The command was an In-band RESET, set where the reset is read rather
+    // than by inspecting the opcode a second time.
+    bool in_band_reset = false;
+
+    // The response byte resolved to ACCEPT. §5.2, p.90, makes this the
+    // condition on a configuration write taking effect -- "upon the successful
+    // SET_CONFIGURATION" -- and §8.3.2, p.122, says what the alternative
+    // leaves behind.
+    bool accepted = false;
 };
 
 void AddChannelSupportChildren( Field* parent, uint32_t value )
@@ -1148,8 +1168,10 @@ bool ReadShortData( PhaseReader* reader, Field* parent, const PacketContext& ctx
 //
 // Read through ReadUncovered because there is no CRC to accumulate them into:
 // "No CRC byte and thus CRC checking must be ignored."
-void ReadResetRemainder( PhaseReader* reader, Field* parent, IoMode mode )
+void ReadResetRemainder( PhaseReader* reader, Field* parent, IoMode mode, PacketContext* ctx )
 {
+    ctx->in_band_reset = true;
+
     std::vector<uint8_t> bytes;
     ByteSpan span{};
     for( ;; )
@@ -1289,27 +1311,37 @@ bool ReadElements( PhaseReader* reader, const ElementList& list, Field* parent, 
         else if( element == Element::Data32 && config->have_address )
             AddConfigChildren( &field, config->address, static_cast<uint32_t>( value ) );
 
+        // A DWord written to 008h in the command phase is the one packet that
+        // changes how the bus itself is read from the next chip select onward.
+        // Recorded here, applied nowhere: whether it takes effect depends on a
+        // response byte this phase has not reached yet.
+        if( element == Element::Data32 && reader->PhaseOf() == Phase::Command && config->have_address
+            && IsGeneralConfigAddress( config->address ) )
+        {
+            config->general_config_write =
+                DecodeGeneralConfig( config->address, static_cast<uint32_t>( value ), &config->general_config );
+        }
+
         parent->Add( std::move( field ) );
     }
     return true;
 }
 
-} // namespace
-
-LinkDecoder::LinkDecoder( ByteSource* source ) : mSource( source )
+// Walk one chip-select-delimited transaction into `out`.
+//
+// LIFTED OUT OF LinkDecoder::Decode SO THAT IT HAS ONE EXIT. A malformed
+// packet is a decode that stops early rather than a failure, so this returns
+// from fourteen places, and the session update below has to be worked out
+// after every one of them -- including the ones that never reach a response
+// byte, which is exactly the case §8.3.2 p.122 calls uncertain. Fourteen
+// copies of that reasoning is fourteen chances to leave one out.
+void DecodeTransaction( ByteSource* source, Transaction* out, PacketContext* context )
 {
-}
-
-bool LinkDecoder::Decode( Transaction* out )
-{
-    if( out == nullptr || !mSource->Active() )
-        return false;
-
-    Transaction txn;
-    PacketContext config;
+    Transaction& txn = *out;
+    PacketContext& config = *context;
 
     // ----------------------------------------------------------------- command
-    PhaseReader cmd( mSource, Phase::Command );
+    PhaseReader cmd( source, Phase::Command );
     Field command( "Command", "", 0, 8, ByteSpan{} );
 
     uint8_t opcode = 0;
@@ -1318,8 +1350,7 @@ bool LinkDecoder::Decode( Transaction* out )
     {
         txn.truncated = true;
         txn.fields.push_back( std::move( command ) );
-        *out = std::move( txn );
-        return true;
+        return;
     }
 
     OpcodeInfo info;
@@ -1327,8 +1358,7 @@ bool LinkDecoder::Decode( Transaction* out )
     {
         command.Add( ErrorField( "Opcode", Hex( opcode, 2 ) + "  not a defined command opcode" ) );
         txn.fields.push_back( std::move( command ) );
-        *out = std::move( txn );
-        return true;
+        return;
     }
 
     command.Add( MakeField( "Opcode", Hex( opcode, 2 ) + "  " + info.name, opcode, 8, opcode_span ) );
@@ -1347,8 +1377,7 @@ bool LinkDecoder::Decode( Transaction* out )
             command.Add( ErrorField( "Request Length",
                                      "C1C0 = 10b is Reserved -- packet length unknown, decode stopped" ) );
             txn.fields.push_back( std::move( command ) );
-            *out = std::move( txn );
-            return true;
+            return;
         }
         config.short_length = info.request_length;
         command.Add( MakeField( "Request Length", Plural( info.request_length, "byte" ), info.request_length, 8, opcode_span ) );
@@ -1361,8 +1390,7 @@ bool LinkDecoder::Decode( Transaction* out )
                                  std::string( "no shape transcribed for " ) + info.name
                                      + " -- packet length unknown, decode stopped" ) );
         txn.fields.push_back( std::move( command ) );
-        *out = std::move( txn );
-        return true;
+        return;
     }
 
     // Section 8.3.2, p.122: RESET carries no CRC byte and gets no response
@@ -1374,20 +1402,18 @@ bool LinkDecoder::Decode( Transaction* out )
     // Running out of bytes is the normal end here, so `truncated` stays false.
     if( shape.framing == PacketFraming::NoCrcNoResponse )
     {
-        ReadResetRemainder( &cmd, &command, mSource->Mode() );
+        ReadResetRemainder( &cmd, &command, source->Mode(), &config );
         command.span = cmd.Span();
         txn.fields.push_back( std::move( command ) );
         txn.span = txn.fields.front().span;
-        *out = std::move( txn );
-        return true;
+        return;
     }
 
     if( !ReadElements( &cmd, shape.command, &command, &config ) )
     {
         txn.truncated = !config.stopped;
         txn.fields.push_back( std::move( command ) );
-        *out = std::move( txn );
-        return true;
+        return;
     }
 
     const uint8_t command_crc = cmd.Crc();
@@ -1397,8 +1423,7 @@ bool LinkDecoder::Decode( Transaction* out )
     {
         txn.truncated = true;
         txn.fields.push_back( std::move( command ) );
-        *out = std::move( txn );
-        return true;
+        return;
     }
     command.Add( CrcField( received_crc, command_crc, crc_span ) );
     command.span = cmd.Span();
@@ -1406,16 +1431,15 @@ bool LinkDecoder::Decode( Transaction* out )
 
     // --------------------------------------------------------------------- TAR
     ByteSpan tar_span{};
-    if( !mSource->TurnAround( &tar_span ) )
+    if( !source->TurnAround( &tar_span ) )
     {
         txn.truncated = true;
-        *out = std::move( txn );
-        return true;
+        return;
     }
     txn.fields.push_back( MakeField( "TAR", Plural( kTurnAroundClocks, "clock" ), 0, 8, tar_span ) );
 
     // ---------------------------------------------------------------- response
-    PhaseReader rsp( mSource, Phase::Response );
+    PhaseReader rsp( source, Phase::Response );
     Field response( "Response", "", 0, 8, ByteSpan{} );
 
     uint8_t response_byte = 0;
@@ -1431,8 +1455,7 @@ bool LinkDecoder::Decode( Transaction* out )
             if( wait_states != 0 )
                 response.Add( MakeField( "WAIT_STATE", Plural( wait_states, "byte-time" ) + " of delay", 0x0F, 8, ByteSpan{} ) );
             txn.fields.push_back( std::move( response ) );
-            *out = std::move( txn );
-            return true;
+            return;
         }
         if( !IsWaitState( response_byte ) )
             break;
@@ -1448,13 +1471,17 @@ bool LinkDecoder::Decode( Transaction* out )
     {
         response.Add( ErrorField( "Response", Hex( response_byte, 2 ) + "  not a defined response encoding" ) );
         txn.fields.push_back( std::move( response ) );
-        *out = std::move( txn );
-        return true;
+        return;
     }
 
     // The response byte is covered by the response CRC (section 5.2, p.90);
     // only the WAIT_STATE bytes skipped above are not.
     rsp.CrcUpdate( response_byte );
+
+    // ACCEPT is what "completes successfully" means for a configuration write
+    // -- §5.2, p.90, and §8.3.2, p.122. Recorded here rather than at the end
+    // because several of the exits below are past this point.
+    config.accepted = ( rinfo.code == ResponseCode::Accept );
 
     Field response_field( "Response", Hex( response_byte, 2 ) + "  " + rinfo.name, response_byte, 8, response_span );
     if( rinfo.code == ResponseCode::FatalError )
@@ -1482,8 +1509,7 @@ bool LinkDecoder::Decode( Transaction* out )
         response_field.severity = Severity::Warning;
         response.Add( std::move( response_field ) );
         txn.fields.push_back( std::move( response ) );
-        *out = std::move( txn );
-        return true;
+        return;
     }
 
     const bool modifier_applies = ( opcode == 0x25 ) && ( rinfo.code == ResponseCode::Accept );
@@ -1544,8 +1570,7 @@ bool LinkDecoder::Decode( Transaction* out )
     {
         txn.truncated = !config.stopped;
         txn.fields.push_back( std::move( response ) );
-        *out = std::move( txn );
-        return true;
+        return;
     }
 
     const uint8_t computed = rsp.Crc();
@@ -1555,15 +1580,124 @@ bool LinkDecoder::Decode( Transaction* out )
     {
         txn.truncated = true;
         txn.fields.push_back( std::move( response ) );
-        *out = std::move( txn );
-        return true;
+        return;
     }
     response.Add( CrcField( rsp_crc_byte, computed, rsp_crc_span ) );
     response.span = rsp.Span();
     txn.fields.push_back( std::move( response ) );
 
     txn.span = Merge( txn.fields.front().span, txn.fields.back().span );
-    *out = std::move( txn );
+}
+
+// The settings that will be in force once this chip select deasserts, as their
+// own top-level block.
+//
+// It carries no span on purpose. Nothing on the wire is being described -- the
+// bytes that caused this are already decoded above, in the Data field or in
+// Register Reset -- so there is no bubble to draw and the shell skips it. What
+// it adds is the consequence, which is the one thing a reader cannot work out
+// from the packet without the specification open beside them.
+void AddSessionFields( Field* session, const GeneralConfig& config )
+{
+    const char* mode_name = nullptr;
+    switch( config.mode )
+    {
+    case IoMode::Single:
+        mode_name = "Single I/O";
+        break;
+    case IoMode::Dual:
+        mode_name = "Dual I/O";
+        break;
+    case IoMode::Quad:
+        mode_name = "Quad I/O";
+        break;
+    }
+
+    Field mode( "I/O Mode", Hex( config.mode_encoding, 1 ), config.mode_encoding, 2, ByteSpan{} );
+    if( config.mode_reserved )
+    {
+        // p.95 gives 11b no mode, so there is nothing to switch to. Saying so
+        // and staying put is the only honest option: picking a mode here would
+        // be an invented fact that then silently garbles every later byte.
+        mode.text += "  Reserved, so the I/O mode is left as it was";
+        mode.severity = Severity::Warning;
+    }
+    else
+    {
+        mode.text += std::string( "  " ) + mode_name + ", from this chip select's deassertion edge";
+    }
+    session->Add( std::move( mode ) );
+
+    session->Add( Field( "CRC Checking",
+                         std::string( config.crc_checking ? "1  enabled" : "0  disabled" )
+                             + ", from this chip select's deassertion edge",
+                         config.crc_checking ? 1u : 0u, 1, ByteSpan{} ) );
+}
+
+void RecordSessionUpdate( Transaction* txn, const PacketContext& config )
+{
+    if( config.in_band_reset )
+    {
+        // §8.3.2, p.123, names exactly one register, and the reset value comes
+        // from the Default column of §6.2.1.3 rather than being restated here
+        // -- Single I/O with CRC checking off, which is also where a capture
+        // that starts at eSPI Reset# begins.
+        GeneralConfig reset;
+        if( !GeneralConfigResetState( &reset ) )
+            return;
+
+        txn->session.change = SessionChange::InbandReset;
+        txn->session.config = reset;
+    }
+    else if( config.general_config_write && config.accepted )
+    {
+        txn->session.change = SessionChange::GeneralConfigWritten;
+        txn->session.config = config.general_config;
+    }
+    else if( config.general_config_write )
+    {
+        // §8.3.2, p.122: "As the transaction does not complete successfully, it
+        // is uncertain on the state of the interface settings after the error."
+        // Nothing better than the previous mode is available to carry on with,
+        // and saying so is the difference between a decode a reader can trust
+        // and one they cannot.
+        txn->session.change = SessionChange::GeneralConfigUncertain;
+
+        Field session( "Session", "", 0, 8, ByteSpan{} );
+        Field note( "Settings Uncertain",
+                    "the write to General Capabilities and Configurations did not complete, so the I/O mode and CRC "
+                    "checking in force after this chip select are unknown",
+                    0, 8, ByteSpan{} );
+        note.kind = FieldKind::Note;
+        note.severity = Severity::Warning;
+        session.Add( std::move( note ) );
+        txn->fields.push_back( std::move( session ) );
+        return;
+    }
+
+    if( txn->session.change == SessionChange::None )
+        return;
+
+    Field session( "Session", "", 0, 8, ByteSpan{} );
+    AddSessionFields( &session, txn->session.config );
+    txn->fields.push_back( std::move( session ) );
+}
+
+} // namespace
+
+LinkDecoder::LinkDecoder( ByteSource* source ) : mSource( source )
+{
+}
+
+bool LinkDecoder::Decode( Transaction* out )
+{
+    if( out == nullptr || !mSource->Active() )
+        return false;
+
+    *out = Transaction{};
+    PacketContext config;
+    DecodeTransaction( mSource, out, &config );
+    RecordSessionUpdate( out, config );
     return true;
 }
 

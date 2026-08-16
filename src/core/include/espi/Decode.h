@@ -2,6 +2,7 @@
 #define ESPI_DECODE_H
 
 #include "espi/ByteStream.h"
+#include "espi/ConfigRegisters.h"
 
 #include <string>
 #include <vector>
@@ -100,12 +101,62 @@ struct Field
     const Field* Find( const std::string& name ) const;
 };
 
+// ---------------------------------------------------------------------------
+//  WHAT A TRANSACTION DOES TO THE SESSION
+//
+//  Two commands change how the transactions *after* them have to be decoded,
+//  and both land on the same edge -- the deassertion of the chip select that
+//  carried them, not the byte that stated them:
+//
+//    - a SET_CONFIGURATION to General Capabilities and Configurations that the
+//      target ACCEPTs. §5.1, p.86: "The SET_CONFIGURATION is completed with the
+//      current mode of operation. The new mode of operation will only take
+//      effect at the deassertion edge of the Chip Select#." §6.2, pp.92-93,
+//      says the same of any register write, and §5.2, p.90, of CRC checking.
+//
+//    - an In-band RESET, which returns that one register -- and only that one
+//      -- to its reset default. §8.3.2, p.123: "Wait until CS# deassertion and
+//      assert the in-band reset internally at the CS# deassertion edge."
+//
+//  And a third case that changes nothing while leaving nothing known. §8.3.2,
+//  p.122, on a SET_CONFIGURATION that does not get an ACCEPT: "As the
+//  transaction does not complete successfully, it is uncertain on the state of
+//  the interface settings after the error." The specification's own answer to
+//  that is the In-band RESET this section defines.
+//
+//  BOTH VALID CASES CARRY THE WHOLE REGISTER, which is why this record states
+//  the resulting settings outright rather than a change against what came
+//  before. A decoder that had to know the previous state to describe the new
+//  one would be a decoder that could not decode a fixture on its own.
+//
+//  Carried as a struct rather than left in the rendered text: a state machine
+//  that scraped field names would break the moment one was reworded, and would
+//  break silently.
+// ---------------------------------------------------------------------------
+enum class SessionChange : uint8_t
+{
+    None,
+    GeneralConfigWritten,   // an ACCEPTed write of 008h; `config` is the result
+    GeneralConfigUncertain, // a write of 008h that did not complete
+    InbandReset,            // 008h back to its reset default; `config` is that
+};
+
+struct SessionUpdate
+{
+    SessionChange change = SessionChange::None;
+
+    // The settings in force from the deassertion edge onward. Meaningful for
+    // GeneralConfigWritten and InbandReset; untouched for the other two.
+    GeneralConfig config{};
+};
+
 // One chip-select-delimited transaction.
 struct Transaction
 {
     std::vector<Field> fields; // top level: Command, TAR, Response
     ByteSpan span{};
     bool truncated = false;    // chip select deasserted mid-packet
+    SessionUpdate session{};
 
     const Field* Find( const std::string& name ) const;
     bool HasError() const;

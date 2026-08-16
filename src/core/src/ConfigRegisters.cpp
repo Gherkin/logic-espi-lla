@@ -85,6 +85,33 @@ uint32_t Extract( uint32_t value, uint8_t high, uint8_t low )
     return ( value >> low ) & mask;
 }
 
+struct IoModeSelectEntry
+{
+    uint8_t encoding;
+    IoMode mode;
+    bool reserved;
+};
+
+#define ESPI_IO_MODE_ENTRY( ENCODING, MODE, RESERVED ) IoModeSelectEntry{ ENCODING, IoMode::MODE, RESERVED },
+const IoModeSelectEntry kIoModes[] = { ESPI_IO_MODE_SELECT_TABLE( ESPI_IO_MODE_ENTRY ) };
+#undef ESPI_IO_MODE_ENTRY
+
+// A field of one register, by the name the table gives it.
+//
+// Looked up rather than repeated, so the bit positions are stated exactly once
+// -- in the row a QC reader checks against p.94 and p.95. A null return means
+// the table no longer has a field by that name, and every caller treats that
+// as "say nothing" rather than falling back on a remembered bit position.
+const FieldEntry* FindField( uint16_t offset, const char* name )
+{
+    for( const FieldEntry& f : kFields )
+    {
+        if( f.offset == offset && std::strcmp( f.name, name ) == 0 )
+            return &f;
+    }
+    return nullptr;
+}
+
 } // namespace
 
 ConfigAddress ClassifyConfigAddress( uint16_t address, const char** name )
@@ -198,6 +225,55 @@ bool ConfigResetValue( uint16_t address, uint32_t* value, uint32_t* known )
     if( known != nullptr )
         *known = mask;
     return true;
+}
+
+bool IsGeneralConfigAddress( uint16_t address )
+{
+    // Judged on the select bits alone, deliberately. An address with the top
+    // four bits set still reaches this register -- the target ignores them
+    // (§3.7, p.38) -- so the bus really does change mode, and a decoder that
+    // refused to follow it because the address was malformed would produce
+    // garbage from there on. DescribeConfigAddress is what says the address is
+    // out of spec; this only says which register it landed on.
+    return ( address & ESPI_CONFIG_ADDRESS_SELECT_MASK ) == ESPI_GENERAL_CONFIG_OFFSET;
+}
+
+bool DecodeGeneralConfig( uint16_t address, uint32_t value, GeneralConfig* out )
+{
+    if( out == nullptr || !IsGeneralConfigAddress( address ) )
+        return false;
+
+    const FieldEntry* select = FindField( ESPI_GENERAL_CONFIG_OFFSET, "I/O Mode Select" );
+    const FieldEntry* crc = FindField( ESPI_GENERAL_CONFIG_OFFSET, "CRC Checking Enable" );
+    if( select == nullptr || crc == nullptr )
+        return false;
+
+    const uint32_t encoding = Extract( value, select->high, select->low );
+
+    GeneralConfig config;
+    config.mode_encoding = static_cast<uint8_t>( encoding );
+    config.crc_checking = Extract( value, crc->high, crc->low ) != 0;
+
+    // The encoding table covers 00b through 11b with no holes, so a miss here
+    // would be a transcription gap rather than anything on the wire.
+    for( const IoModeSelectEntry& e : kIoModes )
+    {
+        if( e.encoding != encoding )
+            continue;
+        config.mode = e.mode;
+        config.mode_reserved = e.reserved;
+        *out = config;
+        return true;
+    }
+    return false;
+}
+
+bool GeneralConfigResetState( GeneralConfig* out )
+{
+    uint32_t value = 0;
+    if( !ConfigResetValue( ESPI_GENERAL_CONFIG_OFFSET, &value, nullptr ) )
+        return false;
+    return DecodeGeneralConfig( ESPI_GENERAL_CONFIG_OFFSET, value, out );
 }
 
 size_t ChannelSupportCount()

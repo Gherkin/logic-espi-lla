@@ -42,6 +42,7 @@ add_library(espi_core STATIC
     src/core/src/VirtualWires.cpp
     src/core/src/CycleTypes.cpp
     src/core/src/LinkDecoder.cpp
+    src/core/src/Session.cpp
 )
 
 target_include_directories(espi_core

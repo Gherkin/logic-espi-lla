@@ -3,6 +3,9 @@ Command
   Ignored  11 bytes  FF FF FF C2 01 C0 03 00 C3 C0 69
     Reset Pattern  Figure 65 draws 16 clocks with every I/O line high; this frame is 96 clocks and has ignored bytes that are not all FFh [!]
   Register Reset  008h-00Bh General Capabilities and Configurations at the chip select deassertion edge; every other register retains its value
+Session
+  I/O Mode  0x0  Single I/O, from this chip select's deassertion edge
+  CRC Checking  0  disabled, from this chip select's deassertion edge
 ---
 Command
   Opcode  0x21  GET_CONFIGURATION

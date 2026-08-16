@@ -319,6 +319,55 @@
 #define ESPI_CHANNEL_SUPPORTED_PLATFORM_MASK 0xF0u
 
 // ---------------------------------------------------------------------------
+//  I/O MODE SELECT, AS A MODE RATHER THAN AS A LABEL -- offset 08h bits 27:26,
+//  §6.2.1.3, p.95.
+//
+//  The same four rows the IoModeSelect group of ESPI_CONFIG_ENUM_TABLE already
+//  carries, stated a second time in the form the session state machine needs:
+//  an espi::IoMode the sampler can be switched to, rather than a string to
+//  print. Two transcriptions of one page is a thing worth being uneasy about,
+//  so tests/test_link.cpp asserts row for row that the two agree -- a table
+//  edited on one side and not the other is a failure, not a divergence nobody
+//  notices.
+//
+//  X( ENCODING, MODE, RESERVED )
+//
+//  RESERVED marks the row the page prints as Reserved. That row's MODE column
+//  is not a value the specification gives and nothing reads it: a reserved
+//  encoding leaves the session where it was, because a controller writing 11b
+//  has told us nothing about what mode it is about to talk in and picking one
+//  would be a guess dressed as a decode.
+//
+//  WHAT THIS FIELD DOES TO A CAPTURE. From p.95: "eSPI controller programs
+//  this field to enable the appropriate mode of operation, which will take
+//  effect at the deassertion edge of the Chip Select#." §5.1, p.86, says the
+//  same from the link layer's side and adds what happens to the transaction
+//  that carries it -- "The SET_CONFIGURATION is completed with the current
+//  mode of operation" -- so the command, its response and its CRC are all
+//  still in the old mode, and only the transaction after it is not.
+//
+//  Also from p.95, and not acted on here: "The I/O Mode configured in this
+//  field must be supported by both the controller and the target." What the
+//  target supports is the neighbouring I/O Mode Support field, which only ever
+//  appears in a GET_CONFIGURATION response -- so checking a selection against
+//  it means remembering a different transaction, and nothing in this tree does
+//  that yet.
+// ---------------------------------------------------------------------------
+
+// X( ENCODING, MODE, RESERVED )
+#define ESPI_IO_MODE_SELECT_TABLE( X )                                                                                             \
+    X( 0x0, Single, false )                                                                                                        \
+    X( 0x1, Dual, false )                                                                                                          \
+    X( 0x2, Quad, false )                                                                                                          \
+    X( 0x3, Single, true ) /* Reserved -- the mode column is unread on this row */
+
+// The register the two fields above live in. It repeats the Start column of
+// Table 21's "General Capabilities and Configurations" row rather than stating
+// anything new, and the code needs it as a number: the whole of the session
+// state machine hangs off recognising this one address.
+#define ESPI_GENERAL_CONFIG_OFFSET 0x008u
+
+// ---------------------------------------------------------------------------
 //  TARGET FLASH ERASE BLOCK SIZE -- offset 44h bits 15:8, p.105.
 //
 //  The second bit field in the map, and the only other field that has to be

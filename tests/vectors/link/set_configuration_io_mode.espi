@@ -1,0 +1,82 @@
+# The three ways a write to General Capabilities and Configurations can end.
+#
+# HAND BUILT FROM THE SPECIFICATION. espi_dump.txt only ever addresses 0020h
+# and 0030h, so the register that decides how the bus itself is read is never
+# written in it -- there is no capture evidence behind any of this.
+#
+# 008h is the only register whose contents change what the analyzer must do
+# next, and §5.1 p.86 says when: "The SET_CONFIGURATION is completed with the
+# current mode of operation. The new mode of operation will only take effect at
+# the deassertion edge of the Chip Select#." So every transaction below,
+# including the one that selects Quad, is itself Single I/O, and these bytes
+# are the same bytes whichever mode follows them.
+#
+# The DWords are the one from config_general.espi with the I/O Mode Select
+# field changed, so the three decodes differ in exactly the field under test.
+# On the wire the DWord goes least significant byte first.
+#
+# CRC bytes pasted from tools/crc_ref.py (rule R4).
+
+# --- 1. ACCEPTed: Quad I/O and CRC checking, from the deassertion edge -------
+#
+#   8B34000F   bit 31      CRC Checking Enable            1
+#              bits 27:26  I/O Mode Select                10b   Quad I/O
+#              bits 25:24  I/O Mode Support               11b   Single, Dual and Quad
+#              bits 22:20  Operating Frequency            011b  50 MHz
+#              bits 18:16  Maximum Frequency Supported    100b  66 MHz
+#              bits 7:0    Channel Supported              0Fh
+#
+# The target advertises Quad support in the same DWord, which is what p.95
+# requires of a selection: "The I/O Mode configured in this field must be
+# supported by both the controller and the target." Nothing here checks that --
+# I/O Mode Support is read-only and only means anything coming back from a
+# GET_CONFIGURATION -- so the two agreeing is provenance, not an assertion.
+CMD 22 00 08 0F 00 34 8B C6
+TAR
+RSP 08 0F 01 95
+
+# --- 2. Not ACCEPTed: the settings afterwards are unknown -------------------
+#
+# The same write selecting Dual I/O, answered NON_FATAL_ERROR. §8.3.2, p.122,
+# is explicit about what that leaves behind: "One example where eSPI controller
+# and targets may go out of synchronization is when SET_CONFIGURATION from eSPI
+# controller to eSPI target results in an error. As the transaction does not
+# complete successfully, it is uncertain on the state of the interface settings
+# after the error."
+#
+# So this is NOT "the mode stays as it was". Nothing on the bus says whether
+# the target took the write, and the specification's own remedy is the In-band
+# RESET that section goes on to define. The decode has to say unknown; carrying
+# on in the old mode is the only thing an analyzer can then do, and it is a
+# guess, not a decode.
+CMD 22 00 08 0F 00 34 87 E2
+TAR
+RSP 02 0F 01 12
+
+# --- 3. ACCEPTed: Dual I/O, and CRC checking turned back off ----------------
+#
+#   0734000F   bit 31      CRC Checking Enable            0
+#              bits 27:26  I/O Mode Select                01b   Dual I/O
+#
+# Here so that all three modes p.95 defines are reached by an accepted write
+# somewhere in the suite -- Quad above, Dual here, and Single by the In-band
+# RESET in reset.espi. A table row no packet ever selects is a row no test
+# constrains, whatever the mutation runner reports about the rows around it.
+CMD 22 00 08 0F 00 34 07 6B
+TAR
+RSP 08 0F 01 95
+
+# --- 4. ACCEPTed, but the selection is the encoding p.95 reserves -----------
+#
+#   0F34000F   bit 31      CRC Checking Enable            0
+#              bits 27:26  I/O Mode Select                11b   Reserved
+#              bits 25:24  I/O Mode Support               11b   Single, Dual and Quad
+#
+# A target that accepts this has told us nothing about what mode it is about to
+# talk in, so there is no mode to switch to. The CRC Checking Enable bit in the
+# same DWord is not reserved and does take effect -- the two fields are
+# independent, and treating the whole write as void would be as wrong as
+# picking a mode.
+CMD 22 00 08 0F 00 34 0F 53
+TAR
+RSP 08 0F 01 95

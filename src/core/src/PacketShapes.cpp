@@ -14,9 +14,12 @@ namespace
 // encodings, and it never repeats their masks either -- the four short cycles
 // match on 0xFC because Table 2 says their low two bits are C1C0, not because
 // this file decided so.
-// maybe_unused: opcodes whose shape has not been transcribed yet generate a
-// constant nobody references. That is the expected state until stage E lands,
-// not a mistake worth a warning.
+// maybe_unused: an opcode with no row in the shape table generates a constant
+// nobody references. Every opcode in Table 2 has a row now -- RESET was the
+// last one without -- so nothing here is actually unused, and the attribute
+// stays only so that adding an opcode ahead of its shape is a compile that
+// works rather than a wall of warnings. TestEveryOpcodeHasAShape is what
+// notices that state; a warning here would not.
 #define ESPI_OPCODE_CONST( NAME, ENCODING, MASK, CHANNEL, HAS_C1C0 )                                                               \
     [[maybe_unused]] constexpr uint8_t kOpcode_##NAME = ENCODING;                                                                  \
     [[maybe_unused]] constexpr uint8_t kOpcodeMask_##NAME = MASK;
@@ -68,8 +71,10 @@ constexpr ElementList MakeList( Element a, Element b, Element c )
 {
     return ElementList{ { a, b, c }, 3 };
 }
-// maybe_unused: no shape transcribed so far has four elements. The flash
-// packets in stage E may.
+// maybe_unused: no row in the table has four elements -- the widest are three,
+// `CycleHeader, Payload, Status16`. The bound is still four because the
+// response modifier builds a four-element list at runtime, prepending an
+// appended packet to a response that already has two. See LinkDecoder.
 [[maybe_unused]] constexpr ElementList MakeList( Element a, Element b, Element c, Element d )
 {
     return ElementList{ { a, b, c, d }, 4 };

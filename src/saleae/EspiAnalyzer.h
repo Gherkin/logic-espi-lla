@@ -18,6 +18,28 @@ struct Transaction;
 namespace espi_saleae
 {
 
+// The FrameV2 type name for a decoded field: its display name, lower-cased,
+// with runs of anything that is not a letter or a digit collapsed to one
+// underscore.
+//
+//     "Opcode"               -> opcode
+//     "CRC"                  -> crc
+//     "Virtual Wire Packet"  -> virtual_wire_packet
+//     "PC_FREE"              -> pc_free
+//
+// docs/PLAN.md section 10 calls these names the contract downstream HLAs bind
+// to, so deriving them from a display string is a real trade: one vocabulary
+// instead of two and no table to keep in step, against a rename in the core
+// quietly becoming a rename in the contract.
+//
+// Exposed rather than kept file-local because the fixtures that reach the
+// emission path happen to have single-word field names, so a test driven only
+// through WorkerThread cannot reach the separator at all -- deleting it left
+// every test green. tests/test_sampling.cpp checks both: this function against
+// the four cases above, and the emission path against the type names one
+// fixture actually produces.
+std::string FrameV2TypeName( const std::string& display_name );
+
 // ---------------------------------------------------------------------------
 //  The Logic 2 shell.
 //

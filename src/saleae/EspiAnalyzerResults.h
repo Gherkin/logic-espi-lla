@@ -45,7 +45,12 @@ class EspiAnalyzerResults : public AnalyzerResults
 
     // The only supported way to add a frame. Keeping the text and the frame in
     // one call is what makes the parallel vector safe.
-    U64 AddDecodedField( const Frame& frame, const std::string& name, const std::string& text );
+    //
+    // `text` is the field's own value and `detail` is its explanatory children
+    // folded into a line. They are kept apart rather than concatenated because
+    // a bubble has to be readable at several widths: see GenerateBubbleText.
+    U64 AddDecodedField( const Frame& frame, const std::string& name, const std::string& text,
+                         const std::string& detail );
 
     void GenerateBubbleText( U64 frame_index, Channel& channel, DisplayBase display_base ) override;
     void GenerateExportFile( const char* file, DisplayBase display_base, U32 export_type_user_id ) override;
@@ -58,9 +63,13 @@ class EspiAnalyzerResults : public AnalyzerResults
     {
         std::string name;
         std::string text;
+        std::string detail;
     };
 
     const FieldText* TextFor( U64 frame_index ) const;
+
+    // The frame's raw value formatted in the user's chosen base.
+    std::string NumberText( U64 frame_index, DisplayBase display_base );
 
     std::vector<FieldText> mText;
 };

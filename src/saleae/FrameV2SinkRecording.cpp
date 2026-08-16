@@ -20,6 +20,12 @@ std::vector<TransactionSummary>& Records()
     return records;
 }
 
+std::vector<FieldRecord>& FieldRecords()
+{
+    static std::vector<FieldRecord> records;
+    return records;
+}
+
 } // namespace
 
 // Nothing to enable offline: there is no Logic 2 to tell, and testlib defines
@@ -33,14 +39,25 @@ void EmitTransactionV2( AnalyzerResults* /*results*/, const TransactionSummary& 
     Records().push_back( summary );
 }
 
+void EmitFieldV2( AnalyzerResults* /*results*/, const FieldRecord& field )
+{
+    FieldRecords().push_back( field );
+}
+
 const std::vector<TransactionSummary>& RecordedTransactionsV2()
 {
     return Records();
 }
 
+const std::vector<FieldRecord>& RecordedFieldsV2()
+{
+    return FieldRecords();
+}
+
 void ClearRecordedTransactionsV2()
 {
     Records().clear();
+    FieldRecords().clear();
 }
 
 } // namespace espi_saleae

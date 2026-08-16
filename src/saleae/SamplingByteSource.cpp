@@ -37,8 +37,21 @@ bool SamplingByteSource::SyncToNextAssertion()
     // first rising edge after this point is the first data bit.
     mChannels.clk->AdvanceToAbsPosition( mAssertSample );
 
+    // No falling edge has been seen inside this transaction yet, so the first
+    // byte's span starts at its own first rising edge. There is genuinely
+    // nowhere better: the clock is low from the assertion edge to that rising
+    // edge, so the first bit was launched somewhere in a window whose start is
+    // not observable.
+    mLaunchEdge = 0;
+
     mArmed = true;
     return true;
+}
+
+uint64_t SamplingByteSource::LaunchOf( uint64_t first_edge ) const
+{
+    const bool inside = mLaunchEdge > mAssertSample && mLaunchEdge < first_edge;
+    return inside ? mLaunchEdge : first_edge;
 }
 
 bool SamplingByteSource::NextSamplingEdge( uint64_t* sample )
@@ -61,7 +74,11 @@ bool SamplingByteSource::NextSamplingEdge( uint64_t* sample )
             *sample = edge;
             return true;
         }
-        // A falling edge is where data is launched, not where it is read.
+
+        // A falling edge is where data is launched, not where it is read -- so
+        // it is not a sampling point, and it IS where the bit about to be
+        // sampled first appeared on the wire. Keep it for the span.
+        mLaunchEdge = edge;
     }
 }
 
@@ -113,7 +130,7 @@ bool SamplingByteSource::ReadByte( espi::Phase phase, espi::StreamByte* out )
             return false;
 
         if( i == 0 )
-            first = edge;
+            first = LaunchOf( edge );
         last = edge;
 
         uint8_t value = 0;
@@ -141,7 +158,7 @@ bool SamplingByteSource::TurnAround( espi::ByteSpan* span )
         if( !NextSamplingEdge( &edge ) )
             return false;
         if( i == 0 )
-            first = edge;
+            first = LaunchOf( edge );
         last = edge;
     }
 

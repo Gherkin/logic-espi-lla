@@ -14,6 +14,7 @@ namespace espi_saleae
 // intended direction of the seam.
 
 const std::vector<TransactionSummary>& RecordedTransactionsV2();
+const std::vector<FieldRecord>& RecordedFieldsV2();
 void ClearRecordedTransactionsV2();
 
 } // namespace espi_saleae

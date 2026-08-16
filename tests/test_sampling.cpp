@@ -21,6 +21,7 @@
 #include "espi/IoMode.h"
 #include "espi/LinkDecoder.h"
 
+#include "EspiAnalyzer.h"
 #include "EspiAnalyzerResults.h"
 #include "EspiAnalyzerSettings.h"
 #include "FrameV2SinkRecording.h"
@@ -415,12 +416,89 @@ void TestWorkerThreadEmitsFrames()
     TEST_CHECK( results->TotalStringCount() > 0 );
     if( results->TotalStringCount() > 0 )
         TEST_CHECK( !results->GetString( 0 ).empty() );
+
+    // ---------------------------------------------------------------------
+    //  The FrameV2 type names, which docs/PLAN.md section 10 calls the
+    //  contract downstream HLAs bind to.
+    //
+    //  They are derived from the core's display names, so a rename in the core
+    //  would silently rewrite the contract. This list is written from
+    //  get_vwire.expected -- the same human-written decode T1 uses -- and is in
+    //  emission order, so a rename, a reordering or a field that stops being
+    //  emitted all fail here.
+    // ---------------------------------------------------------------------
+    // Every field this fixture emits happens to have a single-word name, so
+    // the list below cannot reach the separator rule at all -- deleting it
+    // leaves this green. TestFrameV2TypeNames covers that half.
+    const char* const kExpectedTypes[] = {
+        "opcode", "crc",   "tar",  "response", "count",
+        "index",  "data",  "status", "crc",
+    };
+
+    const auto& fields = espi_saleae::RecordedFieldsV2();
+    TEST_CHECK_EQ( fields.size(), sizeof( kExpectedTypes ) / sizeof( kExpectedTypes[ 0 ] ) );
+    for( size_t i = 0; i < fields.size() && i < sizeof( kExpectedTypes ) / sizeof( kExpectedTypes[ 0 ] ); ++i )
+    {
+        if( fields[ i ].type != kExpectedTypes[ i ] )
+        {
+            std::fprintf( stderr, "FAIL  FrameV2 field %zu has type '%s', expected '%s'\n", i,
+                          fields[ i ].type.c_str(), kExpectedTypes[ i ] );
+            TEST_CHECK( false );
+        }
+    }
+
+    // And the payload is the decode, not a placeholder: the value a human
+    // wrote down for the opcode, and a status word whose bits came along.
+    if( !fields.empty() )
+    {
+        // The core formats a field's value and its resolved meaning into one
+        // text -- "0x05  GET_VWIRE" -- and Render only prepends the name.
+        TEST_CHECK( fields[ 0 ].text.find( "GET_VWIRE" ) != std::string::npos );
+        TEST_CHECK( fields[ 0 ].raw == 0x05 );
+    }
+    for( const auto& field : fields )
+    {
+        if( field.type != "status" )
+            continue;
+
+        TEST_CHECK( field.detail.find( "PC_FREE" ) != std::string::npos );
+        TEST_CHECK( field.detail.find( "FLASH_C_FREE" ) != std::string::npos );
+
+        // The same bits again as separate keys. That is the difference between
+        // a sentence in a tooltip and something the tabular view can put in a
+        // column -- get_vwire.expected lists five set bits for 0x010F.
+        TEST_CHECK_EQ( field.parts.size(), size_t( 5 ) );
+        bool found_pc_free = false;
+        for( const auto& part : field.parts )
+        {
+            if( part.first == "pc_free" )
+                found_pc_free = true;
+        }
+        TEST_CHECK( found_pc_free );
+    }
+}
+
+// The type-name derivation on its own, including the case no fixture reaches.
+void TestFrameV2TypeNames()
+{
+    TEST_CHECK( espi_saleae::FrameV2TypeName( "Opcode" ) == "opcode" );
+    TEST_CHECK( espi_saleae::FrameV2TypeName( "CRC" ) == "crc" );
+    TEST_CHECK( espi_saleae::FrameV2TypeName( "Virtual Wire Packet" ) == "virtual_wire_packet" );
+    TEST_CHECK( espi_saleae::FrameV2TypeName( "PC_FREE" ) == "pc_free" );
+
+    // A separator run is one underscore, and neither end of the name carries
+    // one -- a leading or trailing underscore in an HLA key is the kind of
+    // thing nobody notices until it is in somebody's script.
+    TEST_CHECK( espi_saleae::FrameV2TypeName( "Message  Code" ) == "message_code" );
+    TEST_CHECK( espi_saleae::FrameV2TypeName( " Tag / Length " ) == "tag_length" );
+    TEST_CHECK( espi_saleae::FrameV2TypeName( "" ).empty() );
 }
 
 } // namespace
 
 int main()
 {
+    TestFrameV2TypeNames();
     TestEveryFixtureThroughTheWaveform();
     TestDualAndQuadGeometry();
     TestStopsAtChipSelect();

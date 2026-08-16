@@ -35,11 +35,15 @@ bool Emittable( const espi::ByteSpan& span )
     return span.last > span.first;
 }
 
-// Fold a field's explanatory children into one line, so nothing the decoder
-// worked out is lost just because it did not earn its own frame.
-std::string TextWithExplanations( const espi::Field& field )
+// A field's explanatory children on one line, so nothing the decoder worked out
+// is lost just because it did not earn its own frame.
+//
+// Kept separate from the field's own text rather than concatenated onto it:
+// they are shown at different bubble widths, and the structured form of the
+// same thing goes out as a FrameV2 "detail" key.
+std::string Explanations( const espi::Field& field )
 {
-    std::string text = field.text;
+    std::string text;
     for( const espi::Field& child : field.children )
     {
         text += "; ";
@@ -53,6 +57,7 @@ std::string TextWithExplanations( const espi::Field& field )
     return text;
 }
 
+
 U8 FlagsFor( espi::Severity severity )
 {
     if( severity == espi::Severity::Error )
@@ -63,6 +68,28 @@ U8 FlagsFor( espi::Severity severity )
 }
 
 } // namespace
+
+std::string FrameV2TypeName( const std::string& display_name )
+{
+    std::string type;
+    bool pending_separator = false;
+    for( char c : display_name )
+    {
+        const bool alphanumeric = ( c >= '0' && c <= '9' ) || ( c >= 'a' && c <= 'z' ) || ( c >= 'A' && c <= 'Z' );
+        if( !alphanumeric )
+        {
+            pending_separator = !type.empty();
+            continue;
+        }
+        if( pending_separator )
+        {
+            type += '_';
+            pending_separator = false;
+        }
+        type += static_cast<char>( ( c >= 'A' && c <= 'Z' ) ? c - 'A' + 'a' : c );
+    }
+    return type;
+}
 
 EspiAnalyzer::EspiAnalyzer() : mSettings( new EspiAnalyzerSettings() )
 {
@@ -118,7 +145,27 @@ void EspiAnalyzer::EmitField( const espi::Field& field, U64* previous_end )
     frame.mType = field.bit_width;
     frame.mFlags = FlagsFor( field.severity );
 
-    mResults->AddDecodedField( frame, field.name, TextWithExplanations( field ) );
+    const std::string detail = Explanations( field );
+    mResults->AddDecodedField( frame, field.name, field.text, detail );
+
+    // The same field again, structured, for the tabular view and protocol
+    // search. Both surfaces are fed from one walk so they cannot disagree about
+    // what was decoded.
+    FieldRecord record;
+    record.start_sample = field.span.first;
+    record.end_sample = field.span.last;
+    record.type = FrameV2TypeName( field.name );
+    record.name = field.name;
+    record.text = field.text;
+    record.detail = detail;
+    record.raw = field.raw;
+    record.error = field.severity == espi::Severity::Error;
+    for( const espi::Field& child : field.children )
+    {
+        record.parts.emplace_back( FrameV2TypeName( child.name ), child.text.empty() ? child.name : child.text );
+    }
+    EmitFieldV2( mResults.get(), record );
+
     *previous_end = field.span.last;
 }
 

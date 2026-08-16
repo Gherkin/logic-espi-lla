@@ -103,7 +103,15 @@ class SamplingByteSource : public espi::ByteSource
     // Returns false and disarms once the next edge would fall at or after the
     // CS# deassertion, which is what stops the decoder reading past the
     // boundary.
+    //
+    // Records the falling edge it steps over on the way. That edge is where the
+    // bit about to be sampled was LAUNCHED (section 3, p.21), so it is where
+    // the byte's span starts -- see the note on mLaunchEdge.
     bool NextSamplingEdge( uint64_t* sample );
+
+    // Sample where the element starting at `first_edge` was launched: the
+    // falling edge before it, when there is one inside this transaction.
+    uint64_t LaunchOf( uint64_t first_edge ) const;
 
     // Advance the lanes active for `phase` to `sample` and read their levels.
     bool SampleLanes( espi::Phase phase, uint64_t sample, espi::LaneBits* out );
@@ -112,6 +120,29 @@ class SamplingByteSource : public espi::ByteSource
     espi::IoMode mMode;
     uint64_t mAssertSample = 0;
     uint64_t mDeassertSample = 0;
+
+    // The most recent falling edge stepped over inside this transaction, or 0
+    // before the first one.
+    //
+    // WHY A BYTE'S SPAN IS NOT JUST ITS SAMPLING EDGES. Spanning first rising
+    // edge to last rising edge covers only (clocks-1)/clocks of the byte, and
+    // the missing clock period lands entirely in the gap after it. In Single
+    // I/O that is 7/8 of the byte and barely shows; in Quad a byte is two
+    // clocks, so the bubble is half the byte with a full clock period of blank
+    // beside it, and Logic 2 needs a deep zoom before it will draw any text
+    // inside one. Measured at four samples per clock: 28 of 32 samples in
+    // Single, 4 of 8 in Quad.
+    //
+    // A bit is on the wire from the falling edge that launched it, not from the
+    // rising edge that read it, so that is where the span starts. This end of
+    // it is free: NextSamplingEdge has already walked over that edge. The
+    // symmetrical move -- extending past the last rising edge to the falling
+    // edge after it -- is NOT free, because at the end of a capture that
+    // lookahead is exactly the "probe past the end and terminate the worker"
+    // failure, so the span still ends on the last rising edge and half a clock
+    // period is still unclaimed.
+    uint64_t mLaunchEdge = 0;
+
     bool mArmed = false;
 };
 

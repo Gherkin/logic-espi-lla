@@ -4,6 +4,8 @@
 #include <LogicPublicTypes.h>
 
 #include <string>
+#include <utility>
+#include <vector>
 
 class Analyzer;
 class AnalyzerResults;
@@ -49,6 +51,41 @@ struct TransactionSummary
     bool error = false;
 };
 
+// One decoded field, for the tabular view, protocol search and export.
+//
+// WHY THIS EXISTS. The transaction summary above is one row per CS# frame, and
+// the first look at a real screen showed what that costs: the table listed
+// type, start, duration, error, truncated and opcode, and there was no way to
+// check an address, a status word or a CRC against the specification without
+// hovering every bubble in turn. A decode nobody can read is not a decode.
+//
+// `type` is the FrameV2 type name, which docs/PLAN.md section 10 calls the
+// contract downstream HLAs bind to. It is derived from the field's display name
+// -- see TypeNameFor() in EspiAnalyzer.cpp -- which keeps one vocabulary rather
+// than two, at the cost of coupling the contract to a display string. The
+// coupling is deliberate and it is pinned by a test, so a rename shows up as a
+// failure rather than as a silently broken HLA.
+struct FieldRecord
+{
+    U64 start_sample = 0;
+    U64 end_sample = 0;
+
+    std::string type; // "opcode", "crc", "status" -- the HLA contract
+    std::string name; // display name, as the core wrote it
+    std::string text; // the formatted value
+    std::string detail; // explanatory children, folded onto one line
+    U64 raw = 0;
+    bool error = false;
+
+    // The same explanatory children, one key each, so a status word arrives as
+    // sixteen named bits rather than as a sentence. `detail` is what a bubble
+    // can show and this is what the tabular view and protocol search can use.
+    //
+    // Keys named like the record's own fields are dropped rather than silently
+    // overwriting them; see kReservedKeys in FrameV2SinkLogic2.cpp.
+    std::vector<std::pair<std::string, std::string>> parts;
+};
+
 // Declare that this analyzer produces FrameV2 results.
 //
 // Analyzer.h line 42: "call this function if your analyzer produces FrameV2
@@ -64,6 +101,8 @@ struct TransactionSummary
 void EnableFrameV2( Analyzer* analyzer );
 
 void EmitTransactionV2( AnalyzerResults* results, const TransactionSummary& summary );
+
+void EmitFieldV2( AnalyzerResults* results, const FieldRecord& field );
 
 } // namespace espi_saleae
 

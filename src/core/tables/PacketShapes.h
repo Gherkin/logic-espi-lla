@@ -235,7 +235,7 @@
 //  THAT IS A SESSION STATE FACT, not just a register one. Offset 008h holds
 //  I/O Mode Select and CRC Checking Enable, so a RESET puts the bus back to
 //  Single I/O with CRC checking off -- the state ConfigResetValue() returns.
-//  Nothing follows session state across transactions yet; that is phase 7.
+//  espi::SessionState is what follows that across transactions.
 //
 //  TWO FACTS HERE ARE DELIBERATELY NOT IN CODE. The 20MHz ceiling and the
 //  tSHQZ tri-state are properties of the waveform, and nothing in this tree

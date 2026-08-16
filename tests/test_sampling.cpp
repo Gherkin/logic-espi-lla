@@ -231,7 +231,8 @@ void TestEveryFixtureThroughTheWaveform()
 //  shift. The expectation is unchanged: the same bytes went onto the wire, so
 //  the same decode has to come back off it.
 //
-//  This is the geometry only. Following a mid-capture mode switch is phase 7.
+//  This is the geometry only, each run fixed at one mode. Following a switch
+//  from one to another is T2-d below.
 // -------------------------------------------------------------------------
 void TestDualAndQuadGeometry()
 {

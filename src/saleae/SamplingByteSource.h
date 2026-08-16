@@ -89,7 +89,8 @@ class SamplingByteSource : public espi::ByteSource
 
     // Read per transaction rather than fixed at construction: an accepted
     // SET_CONFIGURATION to offset 08h changes the I/O mode at the CS#
-    // deassertion edge. Acting on that is phase 7; this is the seam it needs.
+    // deassertion edge. EspiAnalyzer::WorkerThread calls this before each chip
+    // select with whatever espi::SessionState has worked out.
     void SetMode( espi::IoMode mode ) { mMode = mode; }
 
     // --- espi::ByteSource ---

@@ -1231,7 +1231,8 @@ void ReadResetRemainder( PhaseReader* reader, Field* parent, IoMode mode, Packet
     // the chip select deassertion edge rather than when the opcode is seen.
     // Worth saying out loud because 008h is where I/O Mode Select and CRC
     // Checking Enable live, so this is the bus going back to Single I/O with
-    // CRC checking off -- following that across transactions is phase 7's job.
+    // CRC checking off. Transaction::session carries that to espi::SessionState,
+    // which is what follows it across transactions.
     //
     // The register's name comes from Table 21 rather than being repeated here,
     // so the tree states it once.
